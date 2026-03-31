@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
-import { LoginForm } from "@/modules/auth/components/login-form";
 import { getOptionalSession } from "@/lib/auth/session";
+import { LoginForm } from "@/modules/auth/components/login-form";
 
 export default async function LoginPage() {
   const session = await getOptionalSession();
@@ -11,40 +11,26 @@ export default async function LoginPage() {
   }
 
   return (
-    <main className="grid min-h-screen lg:grid-cols-[1.15fr_0.85fr]">
-      <section className="relative hidden overflow-hidden bg-[#08111d] px-10 py-12 text-white lg:flex">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(147,197,253,0.25),_transparent_35%),linear-gradient(160deg,_rgba(15,61,94,0.92),_rgba(4,12,22,0.98))]" />
-        <div className="absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:54px_54px]" />
-        <div className="relative z-10 flex max-w-xl flex-col justify-between">
-          <div>
-            <p className="text-sm uppercase tracking-[0.35em] text-slate-300">
-              Cidelsa
-            </p>
-            <h1 className="mt-6 max-w-lg text-5xl font-semibold tracking-tight">
-              Control ejecutivo para comercial, carga AX y analitica segura.
-            </h1>
-            <p className="mt-6 max-w-md text-lg leading-8 text-slate-300">
-              Plataforma interna para trazabilidad de importaciones, limpieza de
-              datos y dashboards gerenciales con acceso por rol y alcance real.
-            </p>
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#edf4fb] px-6 py-10">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(18,95,168,0.20),transparent_24%),radial-gradient(circle_at_82%_18%,rgba(119,176,221,0.34),transparent_22%),radial-gradient(circle_at_50%_100%,rgba(11,56,95,0.12),transparent_38%),linear-gradient(135deg,#edf4fb_0%,#dbe9f6_48%,#f7fbff_100%)]" />
+      <div className="absolute -left-24 top-16 h-64 w-64 rounded-full border border-white/60 bg-white/20 blur-3xl" />
+      <div className="absolute bottom-[-6rem] right-[-3rem] h-80 w-80 rounded-full bg-[#7fb3dc]/18 blur-3xl" />
+      <div className="absolute inset-0 opacity-40 [background-image:linear-gradient(rgba(16,36,58,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(16,36,58,0.05)_1px,transparent_1px)] [background-size:48px_48px]" />
+
+      <section className="relative w-full max-w-md rounded-[2rem] border border-white/70 bg-white/88 p-8 shadow-[0_30px_100px_rgba(15,61,94,0.18)] backdrop-blur-md">
+        <div className="mb-8">
+          <div className="inline-flex rounded-full border border-[#bfd2e6] bg-[#eff6fc] px-4 py-1.5 text-sm font-semibold uppercase tracking-[0.28em] text-[#4f6b88]">
+            Cidelsa
           </div>
+          <h1 className="mt-5 text-3xl font-semibold tracking-tight text-[#10243a]">
+            Login
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-[#5e748d]">
+            Ingresa con tu usuario registrado.
+          </p>
         </div>
-      </section>
-      <section className="flex items-center justify-center px-6 py-12 sm:px-10">
-        <div className="w-full max-w-md">
-          <div className="mb-8">
-            <p className="text-sm uppercase tracking-[0.3em] text-muted-foreground">
-              Acceso interno
-            </p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-foreground">
-              Iniciar sesion
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              Usa tus credenciales corporativas registradas en Supabase Auth.
-            </p>
-          </div>
-          <LoginForm />
-        </div>
+
+        <LoginForm />
       </section>
     </main>
   );
