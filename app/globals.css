@@ -55,12 +55,12 @@
     --muted: #102033;
     --muted-foreground: #8ea0b8;
     --border: rgba(255, 255, 255, 0.08);
-    --input: rgba(8, 17, 29, 0.74);
+    --input: rgba(180, 196, 216, 0.74);
     --primary: #0b80d4;
     --primary-foreground: #07101c;
     --secondary: #102a44;
     --secondary-foreground: #dbe8f4;
-    --accent: #17344d;
+    --accent: #ffffff;
     --accent-foreground: #edf5ff;
     --destructive: #fb923c;
     --destructive-foreground: #2b1300;
@@ -98,6 +98,14 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+select {
+  color: #ffffff;
+}
+
+select option {
+  color: #142033;
 }
 
 ::selection {

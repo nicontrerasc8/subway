@@ -18,6 +18,13 @@ type VariationAggregate = {
   grossMargin: number | null;
 };
 
+type VariationTotals = {
+  previousReal: number;
+  currentBudget: number;
+  currentReal: number;
+  grossMargin: number | null;
+};
+
 function formatPen(value: number) {
   return new Intl.NumberFormat("es-PE", {
     style: "currency",
@@ -166,7 +173,7 @@ export function VariationsDashboard({
   }, [filteredRows]);
 
   const totals = useMemo(() => {
-    return byLinea.reduce(
+    return byLinea.reduce<VariationTotals>(
       (acc, row) => ({
         previousReal: acc.previousReal + row.previousReal,
         currentBudget: acc.currentBudget + row.currentBudget,
