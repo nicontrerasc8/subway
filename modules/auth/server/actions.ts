@@ -2,6 +2,8 @@
 
 import { redirect } from "next/navigation";
 
+import { getDefaultDashboardPath } from "@/lib/auth/roles";
+import { getCurrentUser } from "@/lib/auth/session";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { loginSchema } from "@/lib/validators/auth";
 
@@ -48,7 +50,13 @@ export async function loginAction(
     return { error: translateSupabaseAuthError(error.message) };
   }
 
-  redirect("/dashboard/imports");
+  const user = await getCurrentUser();
+
+  if (!user) {
+    return { error: "No se pudo resolver el perfil del usuario autenticado." };
+  }
+
+  redirect(getDefaultDashboardPath(user.role));
 }
 
 export async function logoutAction() {
