@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { forbidden } from "next/navigation";
 
 import { canAccessExecutiveDashboards } from "@/lib/auth/roles";
@@ -27,7 +28,8 @@ export default async function BacklogDetailPage({
   const scope = getParam(query.scope);
 
   return (
-    <BacklogRankingDetailView
+    <Suspense fallback={null}>
+      <BacklogRankingDetailView
       summary={summary}
       scope={scope === "clientes" || scope === "ejecutivos" ? scope : "lineas"}
       basePath="/dashboard/backlog"
@@ -41,6 +43,7 @@ export default async function BacklogDetailPage({
         linea: getParam(query.linea),
         mes: getParam(query.mes),
       }}
-    />
+      />
+    </Suspense>
   );
 }

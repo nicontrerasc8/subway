@@ -35,7 +35,7 @@ export async function getSellerDashboardSummary(): Promise<SellerDashboardSummar
     const cliente = row.cliente ?? "Cliente sin nombre";
     const ventasMonto = row.ventasMonto ?? 0;
 
-    years.add(row.importYear);
+    if (row.importYear !== null) years.add(row.importYear);
     if (row.negocio) negocioSet.add(row.negocio);
     if (row.linea) lineaSet.add(row.linea);
     clientSet.add(cliente);
