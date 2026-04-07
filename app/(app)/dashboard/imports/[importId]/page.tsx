@@ -34,7 +34,7 @@ export default async function ImportDetailPage(
         </Link>
       </div>
 
-      <ImportDetailView importRecord={detail.import} rows={detail.rows} />
+      <ImportDetailView importRecord={detail.import} rows={detail.rows} audit={detail.audit} />
     </div>
   );
 }

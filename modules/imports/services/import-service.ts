@@ -13,6 +13,11 @@ import {
   validateImportFile,
 } from "@/lib/validators/imports";
 import { parseAxWorkbook } from "@/modules/imports/parser/excel";
+import {
+  buildImportAudit,
+  parseImportAudit,
+  type ImportAudit,
+} from "@/modules/imports/services/import-audit";
 
 export const importAccessRoles = importManagerRoles;
 
@@ -35,6 +40,7 @@ type ImportJsonPayload = {
   sheetName: string;
   columns: string[];
   rows: ImportJsonRow[];
+  audit: ImportAudit;
 };
 
 export function canAccessImports(role: AppRole) {
@@ -191,6 +197,13 @@ function parseImportData(importId: string, value: unknown): ImportJsonPayload {
       sheetName: "",
       columns: [],
       rows: [],
+      audit: buildImportAudit({
+        rows: [] as ImportJsonRow[],
+        getRowNumber: (row) => row.row_number,
+        getPayload: (row) => row.payload,
+        getParseStatus: (row) => row.parse_status,
+        getParseErrors: (row) => row.parse_errors,
+      }),
     };
   }
 
@@ -219,24 +232,44 @@ function parseImportData(importId: string, value: unknown): ImportJsonPayload {
       })
     : [];
 
+  const audit =
+    parseImportAudit(value.audit) ??
+    buildImportAudit({
+      rows,
+      getRowNumber: (row) => row.row_number,
+      getPayload: (row) => row.payload,
+      getParseStatus: (row) => row.parse_status,
+      getParseErrors: (row) => row.parse_errors,
+    });
+
   return {
     sheetName: typeof value.sheetName === "string" ? value.sheetName : "",
     columns,
     rows,
+    audit,
   };
 }
 
 function buildImportData(parsed: Awaited<ReturnType<typeof parseAxWorkbook>>) {
+  const rows = parsed.parsedRows.map((row) => ({
+    id: row.rowNumber,
+    row_number: row.rowNumber,
+    parse_status: row.parseStatus,
+    parse_errors: row.parseErrors,
+    payload: row.payload,
+  })) satisfies ImportJsonRow[];
+
   return {
     sheetName: parsed.sheetName,
     columns: parsed.columns,
-    rows: parsed.parsedRows.map((row) => ({
-      id: row.rowNumber,
-      row_number: row.rowNumber,
-      parse_status: row.parseStatus,
-      parse_errors: row.parseErrors,
-      payload: row.payload,
-    })),
+    rows,
+    audit: buildImportAudit({
+      rows,
+      getRowNumber: (row) => row.row_number,
+      getPayload: (row) => row.payload,
+      getParseStatus: (row) => row.parse_status,
+      getParseErrors: (row) => row.parse_errors,
+    }),
   } satisfies ImportJsonPayload;
 }
 
@@ -313,9 +346,9 @@ export async function createImportFromUpload(
   validateImportFile(file);
   const parsed = await parseAxWorkbook(file);
   const storagePath = buildImportSourceRef(file.name, currentUser.id);
-
-  const validRows = parsed.parsedRows.length;
-  const errorRows = 0;
+  const importData = buildImportData(parsed);
+  const validRows = importData.audit.validRows;
+  const errorRows = importData.audit.invalidRows;
 
   console.groupCollapsed("[imports][service] Resumen de importacion");
   console.log("archivo", file.name);
@@ -325,6 +358,12 @@ export async function createImportFromUpload(
   console.log("total_filas", parsed.parsedRows.length);
   console.log("filas_validas", validRows);
   console.log("filas_con_error", errorRows);
+  console.log("filas_con_nulos", importData.audit.rowsWithNullValues);
+  console.log("nulos_por_campo", importData.audit.nullFieldCounts);
+  console.log(
+    "filas_invalidas_detalle",
+    importData.audit.rows.filter((row) => row.hasInvalidData),
+  );
   console.groupEnd();
 
   const { data: importRow, error: importError } = await admin
@@ -350,12 +389,12 @@ export async function createImportFromUpload(
   }
 
   const importId = importRow.id as string;
-  const importData = buildImportData(parsed);
 
   console.groupCollapsed("[imports][service] Payload final para JSON");
   console.log("muestra_filas_json", importData.rows.slice(0, 5));
   console.log("primeras_10_filas_guardadas", buildImportDebugRows(importData, 10));
   console.table(buildImportDebugSummary(importData, 10));
+  console.log("audit", importData.audit);
   console.groupEnd();
 
   const { error: updateError } = await admin
@@ -433,6 +472,7 @@ export async function getImportDetail(importId: string) {
   return {
     import: normalizeImportRecord(importRow as unknown as RecentImportRow),
     rows: collectNormalizedRows(importId, importData),
+    audit: importData.audit,
   };
 }
 
@@ -476,6 +516,13 @@ export async function deleteImportFactRow(importId: string, rowId: number) {
   const importRow = await getImportRowForEdit(importId);
   const importData = parseImportData(importId, importRow.data);
   const nextRows = importData.rows.filter((row) => row.row_number !== rowId);
+  const nextAudit = buildImportAudit({
+    rows: nextRows,
+    getRowNumber: (row) => row.row_number,
+    getPayload: (row) => row.payload,
+    getParseStatus: (row) => row.parse_status,
+    getParseErrors: (row) => row.parse_errors,
+  });
 
   const admin = createAdminSupabaseClient();
   const { error } = await admin
@@ -484,10 +531,11 @@ export async function deleteImportFactRow(importId: string, rowId: number) {
       data: {
         ...importData,
         rows: nextRows,
+        audit: nextAudit,
       },
       total_rows: nextRows.length,
-      valid_rows: nextRows.length,
-      error_rows: 0,
+      valid_rows: nextAudit.validRows,
+      error_rows: nextAudit.invalidRows,
     })
     .eq("id", importId);
 
@@ -630,6 +678,13 @@ export async function updateImportFactRow(
       },
     } satisfies ImportJsonRow;
   });
+  const nextAudit = buildImportAudit({
+    rows: nextRows,
+    getRowNumber: (row) => row.row_number,
+    getPayload: (row) => row.payload,
+    getParseStatus: (row) => row.parse_status,
+    getParseErrors: (row) => row.parse_errors,
+  });
 
   const admin = createAdminSupabaseClient();
   const { error } = await admin
@@ -638,7 +693,11 @@ export async function updateImportFactRow(
       data: {
         ...importData,
         rows: nextRows,
+        audit: nextAudit,
       },
+      total_rows: nextRows.length,
+      valid_rows: nextAudit.validRows,
+      error_rows: nextAudit.invalidRows,
     })
     .eq("id", importId);
 

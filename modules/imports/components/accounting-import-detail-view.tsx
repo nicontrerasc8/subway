@@ -26,6 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { ImportRecord } from "@/lib/types/database";
+import type { ImportAudit } from "@/modules/imports/services/import-audit";
 import type { AccountingImportRow } from "@/modules/imports/services/accounting-import-service";
 
 const DETAIL_PAGE_SIZE = 12;
@@ -80,9 +81,11 @@ function Field({
 export function AccountingImportDetailView({
   importRecord,
   rows,
+  audit,
 }: {
   importRecord: ImportRecord;
   rows: AccountingImportRow[];
+  audit: ImportAudit;
 }) {
   const router = useRouter();
   const [isSavingImport, startSavingImport] = useTransition();
@@ -245,6 +248,9 @@ export function AccountingImportDetailView({
     }
   }
 
+  const nullFieldEntries = Object.entries(audit.nullFieldCounts);
+  const invalidRows = audit.rows.filter((row) => row.hasInvalidData);
+
   return (
     <div className="space-y-6">
       <Card className="border-none bg-[linear-gradient(135deg,#12324f_0%,#1a5672_48%,#2d7f73_100%)] text-white shadow-lg">
@@ -299,6 +305,65 @@ export function AccountingImportDetailView({
               )}
               Borrar lote
             </Button>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="space-y-4 p-5">
+          <div>
+            <h3 className="text-lg font-semibold">Log de importacion</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Resumen persistido en base de datos para esta carga contable.
+            </p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-4">
+            <div className="rounded-2xl border bg-muted/30 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Filas totales</p>
+              <p className="mt-2 text-2xl font-semibold">{audit.totalRows}</p>
+            </div>
+            <div className="rounded-2xl border bg-muted/30 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Filas con nulos</p>
+              <p className="mt-2 text-2xl font-semibold">{audit.rowsWithNullValues}</p>
+            </div>
+            <div className="rounded-2xl border bg-muted/30 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Filas invalidas</p>
+              <p className="mt-2 text-2xl font-semibold">{audit.rowsWithInvalidData}</p>
+            </div>
+            <div className="rounded-2xl border bg-muted/30 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Valores nulos</p>
+              <p className="mt-2 text-2xl font-semibold">{audit.totalNullValues}</p>
+            </div>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl border p-4">
+              <h4 className="text-sm font-semibold">Nulos por campo</h4>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {nullFieldEntries.length ? (
+                  nullFieldEntries.map(([field, count]) => (
+                    <span key={field} className="rounded-full border bg-muted/40 px-3 py-1 text-xs">
+                      {field}: {count}
+                    </span>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">No se detectaron campos nulos.</p>
+                )}
+              </div>
+            </div>
+            <div className="rounded-2xl border p-4">
+              <h4 className="text-sm font-semibold">Filas con data invalida</h4>
+              <div className="mt-3 space-y-2">
+                {invalidRows.length ? (
+                  invalidRows.map((row) => (
+                    <div key={row.rowNumber} className="rounded-xl border bg-muted/30 px-3 py-2 text-sm">
+                      Fila {row.rowNumber}: {row.parseErrors.join(" | ")}
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">No se detectaron filas invalidas.</p>
+                )}
               </div>
             </div>
           </div>

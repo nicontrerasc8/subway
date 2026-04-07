@@ -13,6 +13,11 @@ import {
   validateImportFile,
 } from "@/lib/validators/imports";
 import { parseAccountingWorkbook } from "@/modules/imports/parser/accounting";
+import {
+  buildImportAudit,
+  parseImportAudit,
+  type ImportAudit,
+} from "@/modules/imports/services/import-audit";
 import { importAccessRoles } from "@/modules/imports/services/import-service";
 
 type RecentAccountingImportRow = ImportRecord & {
@@ -32,6 +37,7 @@ type AccountingImportJsonPayload = {
   sheetName: string;
   columns: string[];
   rows: AccountingImportJsonRow[];
+  audit: ImportAudit;
 };
 
 export type AccountingImportRow = {
@@ -176,22 +182,31 @@ function buildImportData(
   negocio: string,
   periodoRange: { periodo: string; periodoDesde: string; periodoHasta: string },
 ) {
+  const rows = parsed.parsedRows.map((row) => ({
+    id: row.rowNumber,
+    row_number: row.rowNumber,
+    parse_status: row.parseStatus,
+    parse_errors: row.parseErrors,
+    payload: {
+      ...row.payload,
+      negocio,
+      periodo_desde: periodoRange.periodoDesde,
+      periodo_hasta: periodoRange.periodoHasta,
+      periodo: periodoRange.periodo,
+    },
+  })) satisfies AccountingImportJsonRow[];
+
   return {
     sheetName: parsed.sheetName,
     columns: [...parsed.columns, "negocio", "periodo_desde", "periodo_hasta", "periodo"],
-    rows: parsed.parsedRows.map((row) => ({
-      id: row.rowNumber,
-      row_number: row.rowNumber,
-      parse_status: row.parseStatus,
-      parse_errors: row.parseErrors,
-      payload: {
-        ...row.payload,
-        negocio,
-        periodo_desde: periodoRange.periodoDesde,
-        periodo_hasta: periodoRange.periodoHasta,
-        periodo: periodoRange.periodo,
-      },
-    })),
+    rows,
+    audit: buildImportAudit({
+      rows,
+      getRowNumber: (row) => row.row_number,
+      getPayload: (row) => row.payload,
+      getParseStatus: (row) => row.parse_status,
+      getParseErrors: (row) => row.parse_errors,
+    }),
   } satisfies AccountingImportJsonPayload;
 }
 
@@ -209,6 +224,13 @@ function parseAccountingImportData(value: unknown): AccountingImportJsonPayload 
       sheetName: "",
       columns: [],
       rows: [],
+      audit: buildImportAudit({
+        rows: [] as AccountingImportJsonRow[],
+        getRowNumber: (row) => row.row_number,
+        getPayload: (row) => row.payload,
+        getParseStatus: (row) => row.parse_status,
+        getParseErrors: (row) => row.parse_errors,
+      }),
     };
   }
 
@@ -237,10 +259,21 @@ function parseAccountingImportData(value: unknown): AccountingImportJsonPayload 
       })
     : [];
 
+  const audit =
+    parseImportAudit(value.audit) ??
+    buildImportAudit({
+      rows,
+      getRowNumber: (row) => row.row_number,
+      getPayload: (row) => row.payload,
+      getParseStatus: (row) => row.parse_status,
+      getParseErrors: (row) => row.parse_errors,
+    });
+
   return {
     sheetName: typeof value.sheetName === "string" ? value.sheetName : "",
     columns,
     rows,
+    audit,
   };
 }
 
@@ -273,6 +306,7 @@ export async function createAccountingImportFromUpload(
   const negocio = normalizeAccountingBusiness(negocioRaw);
   const periodoRange = normalizeAccountingPeriodRange(periodoDesdeRaw, periodoHastaRaw);
   const storagePath = buildImportSourceRef(file.name, currentUser.id);
+  const importData = buildImportData(parsed, negocio, periodoRange);
 
   console.groupCollapsed("[accounting-imports][service] Resumen de importacion");
   console.log("archivo", file.name);
@@ -283,6 +317,10 @@ export async function createAccountingImportFromUpload(
   console.log("hoja", parsed.sheetName);
   console.log("columnas", parsed.columns);
   console.log("total_filas", parsed.parsedRows.length);
+  console.log("filas_validas", importData.audit.validRows);
+  console.log("filas_con_error", importData.audit.invalidRows);
+  console.log("filas_con_nulos", importData.audit.rowsWithNullValues);
+  console.log("nulos_por_campo", importData.audit.nullFieldCounts);
   console.groupEnd();
 
   const { data: importRow, error: importError } = await admin
@@ -294,8 +332,8 @@ export async function createAccountingImportFromUpload(
       uploaded_by: currentUser.id,
       status: "processing",
       total_rows: parsed.parsedRows.length,
-      valid_rows: parsed.parsedRows.length,
-      error_rows: 0,
+      valid_rows: importData.audit.validRows,
+      error_rows: importData.audit.invalidRows,
       sheet_name: parsed.sheetName,
       notes: `Hoja ${parsed.sheetName}. Negocio ${negocio}. Periodo ${periodoRange.periodo}. Archivo de contabilidad persistido en JSON dentro de accounting_imports.data.`,
       data: {},
@@ -306,8 +344,6 @@ export async function createAccountingImportFromUpload(
   if (importError || !importRow) {
     throw new Error("No se pudo registrar la importacion contable.");
   }
-
-  const importData = buildImportData(parsed, negocio, periodoRange);
 
   const { error: updateError } = await admin
     .from("accounting_imports")
@@ -340,8 +376,8 @@ export async function createAccountingImportFromUpload(
     columns: parsed.columns,
     previewRows: buildPreviewRows(importData),
     totalRows: parsed.parsedRows.length,
-    validRows: parsed.parsedRows.length,
-    errorRows: 0,
+    validRows: importData.audit.validRows,
+    errorRows: importData.audit.invalidRows,
   };
 }
 
@@ -400,6 +436,7 @@ export async function getAccountingImportDetail(importId: string) {
   return {
     import: normalizeImportRecord(importRow as unknown as RecentAccountingImportRow),
     rows: importData.rows.map(normalizeAccountingImportRow),
+    audit: importData.audit,
   };
 }
 
@@ -478,6 +515,13 @@ export async function updateAccountingImportRow(
       },
     } satisfies AccountingImportJsonRow;
   });
+  const nextAudit = buildImportAudit({
+    rows: nextRows,
+    getRowNumber: (row) => row.row_number,
+    getPayload: (row) => row.payload,
+    getParseStatus: (row) => row.parse_status,
+    getParseErrors: (row) => row.parse_errors,
+  });
 
   const admin = createAdminSupabaseClient();
   const { error } = await admin
@@ -486,7 +530,11 @@ export async function updateAccountingImportRow(
       data: {
         ...importData,
         rows: nextRows,
+        audit: nextAudit,
       },
+      total_rows: nextRows.length,
+      valid_rows: nextAudit.validRows,
+      error_rows: nextAudit.invalidRows,
     })
     .eq("id", importId);
 
@@ -504,6 +552,13 @@ export async function deleteAccountingImportRow(importId: string, rowId: number)
   const importRow = await getAccountingImportRowForEdit(importId);
   const importData = parseAccountingImportData(importRow.data);
   const nextRows = importData.rows.filter((row) => row.row_number !== rowId);
+  const nextAudit = buildImportAudit({
+    rows: nextRows,
+    getRowNumber: (row) => row.row_number,
+    getPayload: (row) => row.payload,
+    getParseStatus: (row) => row.parse_status,
+    getParseErrors: (row) => row.parse_errors,
+  });
 
   const admin = createAdminSupabaseClient();
   const { error } = await admin
@@ -512,10 +567,11 @@ export async function deleteAccountingImportRow(importId: string, rowId: number)
       data: {
         ...importData,
         rows: nextRows,
+        audit: nextAudit,
       },
       total_rows: nextRows.length,
-      valid_rows: nextRows.length,
-      error_rows: 0,
+      valid_rows: nextAudit.validRows,
+      error_rows: nextAudit.invalidRows,
     })
     .eq("id", importId);
 
