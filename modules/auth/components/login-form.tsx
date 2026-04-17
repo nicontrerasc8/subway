@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { LoaderCircle, LockKeyhole, Mail, ArrowRight } from "lucide-react";
+import { ArrowRight, LoaderCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +25,7 @@ export function LoginForm() {
                 id="email"
                 name="email"
                 type="email"
-                placeholder="usuario@cidelsa.com"
+                placeholder="usuario@subway.com"
                 required
               />
             </div>

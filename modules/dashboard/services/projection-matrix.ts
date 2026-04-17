@@ -43,7 +43,7 @@ export async function getProjectionMatrixSummary(): Promise<ProjectionMatrixSumm
 
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
-    .from("imports")
+    .from("imports_subway")
     .select("data, status")
     .eq("status", "processed");
 

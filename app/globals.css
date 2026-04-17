@@ -1,41 +1,32 @@
 @import "tailwindcss";
 
 :root {
-  /* Fondo más limpio y profesional (menos gris, más aire) */
   --background: #f8fafc;
   --foreground: #0f172a;
 
-  /* Cards con elevación sutil y bordes suaves */
   --card: #ffffff;
   --card-foreground: #0f172a;
-  
-  /* Muted para elementos secundarios (tags, fechas) */
+
   --muted: #f1f5f9;
   --muted-foreground: #64748b;
 
-  /* Bordes más finos y elegantes */
   --border: #e2e8f0;
   --input: #ffffff;
 
-  /* Azul Corporativo Moderno (High Trust) */
-  --primary: #2563eb; 
+  --primary: #2563eb;
   --primary-foreground: #ffffff;
 
-  /* Secondary para estados hover o botones menos importantes */
   --secondary: #eff6ff;
   --secondary-foreground: #1e40af;
 
-  /* Accent para llamar la atención en detalles específicos */
   --accent: #f8fafc;
   --accent-foreground: #0f172a;
 
-  /* Destructive (un rojo más balanceado, no tan naranja) */
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
 
   --ring: rgba(37, 99, 235, 0.2);
 
-  /* Sidebar: Estilo "Glassmorphism" oscuro muy profesional */
   --sidebar: #0f172a;
   --sidebar-foreground: #f8fafc;
 }
@@ -62,41 +53,6 @@
   --color-sidebar-foreground: var(--sidebar-foreground);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Fondo "Midnight" (más profundo que el azul oscuro estándar) */
-    --background: #020617;
-    --foreground: #f8fafc;
-
-    --card: #0f172a;
-    --card-foreground: #f8fafc;
-
-    --muted: #1e293b;
-    --muted-foreground: #94a3b8;
-
-    --border: #1e293b;
-    --input: #1e293b;
-
-    /* Azul vibrante para modo oscuro */
-    --primary: #3b82f6;
-    --primary-foreground: #ffffff;
-
-    --secondary: #1e293b;
-    --secondary-foreground: #f8fafc;
-
-    --accent: #1e293b;
-    --accent-foreground: #f8fafc;
-
-    --destructive: #7f1d1d;
-    --destructive-foreground: #fef2f2;
-    
-    --sidebar: #020617;
-    --sidebar-foreground: #94a3b8;
-  }
-}
-
-/* --- Mejoras de UI Global --- */
-
 * {
   border-color: var(--border);
   transition: background-color 0.2s ease, border-color 0.2s ease;
@@ -106,36 +62,37 @@ body {
   min-height: 100vh;
   background: var(--background);
   color: var(--foreground);
-  font-family: 'Inter', var(--font-sans), sans-serif; /* Inter es mejor para dashboards */
-  /* Eliminé el gradiente pesado para que las gráficas sean las protagonistas */
-  background-image: none; 
+  font-family: "Inter", var(--font-sans), sans-serif;
+  background-image: none;
 }
 
-/* Mejora de Inputs para que no se vean planos */
-input, select, textarea {
+input,
+select,
+textarea {
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   padding: 0.5rem 0.75rem;
   background: var(--input);
 }
 
-/* Estilo para los Selects */
 select {
   color: var(--foreground);
   background-color: var(--input);
 }
 
-/* Scrollbar personalizado para Dashboards */
 ::-webkit-scrollbar {
   width: 8px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 10px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: var(--muted-foreground);
 }
@@ -144,9 +101,11 @@ select {
   0% {
     transform: translateX(-120%);
   }
+
   50% {
     transform: translateX(120%);
   }
+
   100% {
     transform: translateX(260%);
   }

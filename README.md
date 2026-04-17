@@ -1,4 +1,4 @@
-# Cidelsa Command Center
+# Subway Command Center
 
 Dashboard gerencial full-stack para carga manual de Excel exportado desde Microsoft AX, trazabilidad de importaciones y analitica comercial con control de acceso real por roles y scopes.
 
@@ -65,8 +65,8 @@ Copia `.env.example` a `.env.local` y completa tus credenciales de Supabase.
 
 Aplica el SQL en este orden:
 
-1. [`supabase/schema.sql`](/c:/Users/Nico/Documents/Programacion/cidelsa/supabase/schema.sql)
-2. Opcional: [`supabase/seed.sql`](/c:/Users/Nico/Documents/Programacion/cidelsa/supabase/seed.sql)
+1. [`supabase/schema.sql`](/c:/Users/Nico/Documents/Programacion/subway/supabase/schema.sql)
+2. Opcional: [`supabase/seed.sql`](/c:/Users/Nico/Documents/Programacion/subway/supabase/seed.sql)
 
 Luego inicia la app:
 

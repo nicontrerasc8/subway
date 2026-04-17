@@ -5,6 +5,10 @@ import {
   canAccessImports,
   createImportFromUpload,
 } from "@/modules/imports/services/import-service";
+import {
+  subwayImportSourceKeys,
+  type SubwayImportSourceKey,
+} from "@/modules/imports/parser/excel";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -23,6 +27,14 @@ export async function POST(request: Request) {
 
     const formData = await request.formData();
     const file = formData.get("file");
+    const rawFecha = formData.get("fecha");
+    const fecha = typeof rawFecha === "string" && rawFecha.trim() ? rawFecha.trim() : null;
+    const rawSourceKey = formData.get("source_key");
+    const sourceKey =
+      typeof rawSourceKey === "string" &&
+      subwayImportSourceKeys.includes(rawSourceKey as SubwayImportSourceKey)
+        ? (rawSourceKey as SubwayImportSourceKey)
+        : "ax-commercial";
 
     if (!(file instanceof File)) {
       return NextResponse.json(
@@ -31,7 +43,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await createImportFromUpload(file, currentUser);
+    const result = await createImportFromUpload(file, currentUser, {
+      fecha,
+      sourceKey,
+    });
 
     return NextResponse.json(result, { status: 201 });
   } catch (error) {

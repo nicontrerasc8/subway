@@ -26,7 +26,10 @@ import { importAccessRoles } from "@/modules/imports/services/import-service";
 
 type RecentAccountingImportRow = ImportRecord & {
   data?: unknown;
-  profiles: Array<{ full_name: string | null; email: string }>;
+  profiles:
+    | Array<{ full_name: string | null; email: string }>
+    | { full_name: string | null; email: string }
+    | null;
 };
 
 type AccountingImportJsonRow = {
@@ -95,9 +98,11 @@ const ACCOUNTING_GROUPS_BY_SECTION = {
 } as const;
 
 function normalizeImportRecord(row: RecentAccountingImportRow): ImportRecord {
+  const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+
   return {
     ...row,
-    uploaded_by_profile: row.profiles?.[0] ?? null,
+    uploaded_by_profile: profile ?? null,
   };
 }
 
@@ -539,7 +544,7 @@ export async function listRecentAccountingImports() {
   const { data, error } = await supabase
     .from("accounting_imports")
     .select(
-      "id, file_name, storage_path, anio, uploaded_by, uploaded_at, status, total_rows, valid_rows, error_rows, notes, profiles!accounting_imports_uploaded_by_fkey(full_name, email)",
+      "id, file_name, storage_path, anio, uploaded_by, uploaded_at, status, total_rows, valid_rows, error_rows, notes, profiles:profiles_subway!accounting_imports_uploaded_by_fkey(full_name, email)",
     )
     .order("uploaded_at", { ascending: false })
     .limit(20);
@@ -573,7 +578,7 @@ export async function getAccountingImportDetail(importId: string) {
   const { data: importRow, error: importError } = await supabase
     .from("accounting_imports")
     .select(
-      "id, file_name, storage_path, anio, uploaded_by, uploaded_at, status, total_rows, valid_rows, error_rows, notes, data, profiles!accounting_imports_uploaded_by_fkey(full_name, email)",
+      "id, file_name, storage_path, anio, uploaded_by, uploaded_at, status, total_rows, valid_rows, error_rows, notes, data, profiles:profiles_subway!accounting_imports_uploaded_by_fkey(full_name, email)",
     )
     .eq("id", importId)
     .single();

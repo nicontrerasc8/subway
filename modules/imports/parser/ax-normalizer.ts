@@ -158,7 +158,7 @@ function normalizeText(value: unknown) {
   return trimmed ? trimmed : null;
 }
 
-function parseFlexibleNumber(value: unknown) {
+export function parseFlexibleNumber(value: unknown) {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : null;
   }

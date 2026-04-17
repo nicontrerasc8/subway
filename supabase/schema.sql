@@ -63,7 +63,7 @@ begin
   end if;
 end $$;
 
-create table if not exists public.profiles (
+create table if not exists public.profiles_subway (
   id uuid primary key references auth.users(id) on delete cascade,
   full_name text,
   email text not null unique,
@@ -72,7 +72,24 @@ create table if not exists public.profiles (
   created_at timestamptz not null default timezone('utc', now())
 );
 
-update public.profiles
+do $$
+begin
+  if to_regclass('public.profiles') is not null then
+    execute $copy_profiles$
+      insert into public.profiles_subway (id, full_name, email, role, is_active, created_at)
+      select id, full_name, email, role, is_active, created_at
+      from public.profiles
+      on conflict (id) do update
+      set
+        full_name = excluded.full_name,
+        email = excluded.email,
+        role = excluded.role,
+        is_active = excluded.is_active
+    $copy_profiles$;
+  end if;
+end $$;
+
+update public.profiles_subway
 set role = case
   when role::text = 'superadmin' then 'administrador_comercial'::public.app_role
   when role::text = 'gerencia_general' then 'directorio'::public.app_role
@@ -93,7 +110,7 @@ where role::text in (
 
 create table if not exists public.user_scopes (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references public.profiles(id) on delete cascade,
+  user_id uuid not null references public.profiles_subway(id) on delete cascade,
   negocio_id uuid,
   linea_id uuid,
   sector_id uuid,
@@ -101,13 +118,15 @@ create table if not exists public.user_scopes (
   created_at timestamptz not null default timezone('utc', now())
 );
 
-create table if not exists public.imports (
+create table if not exists public.imports_subway (
   id uuid primary key default gen_random_uuid(),
   file_name text not null,
   storage_path text unique,
   anio integer not null,
+  fecha date,
+  source_key text not null default 'ax-commercial',
   sheet_name text,
-  uploaded_by uuid not null references public.profiles(id),
+  uploaded_by uuid not null references public.profiles_subway(id),
   uploaded_at timestamptz not null default timezone('utc', now()),
   status public.import_status not null default 'pending',
   total_rows integer not null default 0,
@@ -123,7 +142,7 @@ create table if not exists public.accounting_imports (
   storage_path text unique,
   anio integer not null,
   sheet_name text,
-  uploaded_by uuid not null references public.profiles(id),
+  uploaded_by uuid not null references public.profiles_subway(id),
   uploaded_at timestamptz not null default timezone('utc', now()),
   status public.import_status not null default 'pending',
   total_rows integer not null default 0,
@@ -133,17 +152,49 @@ create table if not exists public.accounting_imports (
   data jsonb not null default '{}'::jsonb
 );
 
-alter table public.imports add column if not exists anio integer;
-alter table public.imports add column if not exists sheet_name text;
-alter table public.imports add column if not exists data jsonb not null default '{}'::jsonb;
-update public.imports
+alter table public.imports_subway add column if not exists anio integer;
+alter table public.imports_subway add column if not exists fecha date;
+alter table public.imports_subway add column if not exists source_key text not null default 'ax-commercial';
+alter table public.imports_subway add column if not exists sheet_name text;
+alter table public.imports_subway add column if not exists data jsonb not null default '{}'::jsonb;
+update public.imports_subway
 set anio = coalesce(anio, extract(year from uploaded_at)::integer)
 where anio is null;
-alter table public.imports alter column anio set not null;
+alter table public.imports_subway alter column anio set not null;
+
+create table if not exists public.sales_product (
+  id bigserial primary key,
+  import_id uuid not null references public.imports_subway(id) on delete cascade,
+  row_number integer not null,
+  fecha date not null,
+  referencia text,
+  producto text not null,
+  categoria text not null default 'OTROS',
+  unidades numeric(18,4) not null default 0,
+  ventas numeric(18,2) not null default 0,
+  created_at timestamptz not null default timezone('utc', now()),
+  constraint sales_product_source_row_unique unique (import_id, row_number),
+  constraint sales_product_unidades_non_negative check (unidades >= 0),
+  constraint sales_product_ventas_non_negative check (ventas >= 0)
+);
+
+create table if not exists public.sales_payment (
+  id bigserial primary key,
+  import_id uuid not null references public.imports_subway(id) on delete cascade,
+  row_number integer not null,
+  fecha date not null,
+  forma_pago text not null,
+  importe numeric(18,2) not null default 0,
+  operaciones integer not null default 0,
+  created_at timestamptz not null default timezone('utc', now()),
+  constraint sales_payment_source_row_unique unique (import_id, row_number),
+  constraint sales_payment_importe_non_negative check (importe >= 0),
+  constraint sales_payment_operaciones_non_negative check (operaciones >= 0)
+);
 
 create table if not exists public.raw_ax_rows (
   id bigserial primary key,
-  import_id uuid not null references public.imports(id) on delete cascade,
+  import_id uuid not null references public.imports_subway(id) on delete cascade,
   row_number integer not null,
   payload jsonb not null,
   parse_status text not null check (parse_status in ('valid', 'error')),
@@ -181,7 +232,7 @@ create table if not exists public.dim_ejecutivos (
 
 create table if not exists public.fact_comercial (
   id bigserial primary key,
-  import_id uuid not null references public.imports(id) on delete restrict,
+  import_id uuid not null references public.imports_subway(id) on delete restrict,
   situacion text,
   fecha_registro date,
   fecha_adjudicacion date,
@@ -226,8 +277,15 @@ alter table public.user_scopes
 alter table public.user_scopes
   add constraint user_scopes_ejecutivo_fk foreign key (ejecutivo_id) references public.dim_ejecutivos(id);
 
-create index if not exists idx_imports_uploaded_by on public.imports(uploaded_by, uploaded_at desc);
-create index if not exists idx_imports_anio on public.imports(anio, uploaded_at desc);
+create index if not exists idx_imports_subway_uploaded_by on public.imports_subway(uploaded_by, uploaded_at desc);
+create index if not exists idx_imports_subway_anio on public.imports_subway(anio, uploaded_at desc);
+create index if not exists idx_sales_product_fecha on public.sales_product(fecha);
+create index if not exists idx_sales_product_producto on public.sales_product(producto);
+create index if not exists idx_sales_product_categoria on public.sales_product(categoria);
+create index if not exists idx_sales_product_import_id on public.sales_product(import_id);
+create index if not exists idx_sales_payment_fecha on public.sales_payment(fecha);
+create index if not exists idx_sales_payment_forma_pago on public.sales_payment(forma_pago);
+create index if not exists idx_sales_payment_import_id on public.sales_payment(import_id);
 create index if not exists idx_accounting_imports_uploaded_by on public.accounting_imports(uploaded_by, uploaded_at desc);
 create index if not exists idx_accounting_imports_anio on public.accounting_imports(anio, uploaded_at desc);
 create index if not exists idx_raw_ax_rows_import_id on public.raw_ax_rows(import_id, row_number);
@@ -240,12 +298,140 @@ create index if not exists idx_fact_comercial_linea on public.fact_comercial(lin
 create index if not exists idx_fact_comercial_ejecutivo on public.fact_comercial(ejecutivo_id);
 create index if not exists idx_fact_comercial_etapa on public.fact_comercial(etapa);
 
+with source_rows as (
+  select
+    i.id as import_id,
+    i.fecha,
+    (row_item ->> 'row_number')::integer as row_number,
+    row_item -> 'payload' as payload
+  from public.imports_subway i
+  cross join lateral jsonb_array_elements(coalesce(i.data -> 'rows', '[]'::jsonb)) as row_item
+  where i.source_key = 'ax-commercial'
+    and i.fecha is not null
+    and coalesce(row_item ->> 'parse_status', 'valid') = 'valid'
+),
+normalized as (
+  select
+    import_id,
+    fecha,
+    row_number,
+    nullif(payload ->> 'referencia', '') as referencia,
+    coalesce(nullif(payload ->> 'descripcion', ''), nullif(payload ->> 'articulo', '')) as producto,
+    upper(
+      translate(
+        coalesce(nullif(payload ->> 'descripcion', ''), nullif(payload ->> 'articulo', '')),
+        'ÁÉÍÓÚáéíóúÑñ',
+        'AEIOUaeiouNn'
+      )
+    ) as producto_normalizado,
+    case
+      when coalesce(payload ->> 'unidades', payload ->> 'cantidad') ~ '^-?[0-9]+([.,][0-9]+)?$'
+        then replace(coalesce(payload ->> 'unidades', payload ->> 'cantidad'), ',', '.')::numeric
+      else 0
+    end as unidades,
+    case
+      when coalesce(payload ->> 'total', payload ->> 'ventas_monto') ~ '^-?[0-9]+([.,][0-9]+)?$'
+        then replace(coalesce(payload ->> 'total', payload ->> 'ventas_monto'), ',', '.')::numeric
+      else 0
+    end as ventas
+  from source_rows
+)
+insert into public.sales_product (
+  import_id,
+  row_number,
+  fecha,
+  referencia,
+  producto,
+  categoria,
+  unidades,
+  ventas
+)
+select
+  import_id,
+  row_number,
+  fecha,
+  referencia,
+  producto,
+  case
+    when producto_normalizado like '%COMBO%' then 'COMBO'
+    when producto_normalizado like '%BEBIDA%' or producto_normalizado like '%GASEOSA%' or producto_normalizado like '%AGUA%' then 'BEBIDA'
+    when producto_normalizado like '%EXTRA%' or producto_normalizado like '%ADICIONAL%' then 'EXTRA'
+    when producto_normalizado like '%SUB%' then 'SUB'
+    else 'OTROS'
+  end as categoria,
+  greatest(unidades, 0),
+  greatest(ventas, 0)
+from normalized
+where producto is not null
+on conflict (import_id, row_number) do update
+set
+  fecha = excluded.fecha,
+  referencia = excluded.referencia,
+  producto = excluded.producto,
+  categoria = excluded.categoria,
+  unidades = excluded.unidades,
+  ventas = excluded.ventas;
+
+with source_rows as (
+  select
+    i.id as import_id,
+    i.fecha,
+    (row_item ->> 'row_number')::integer as row_number,
+    row_item -> 'payload' as payload
+  from public.imports_subway i
+  cross join lateral jsonb_array_elements(coalesce(i.data -> 'rows', '[]'::jsonb)) as row_item
+  where i.source_key = 'ax_forma_pedido'
+    and i.fecha is not null
+    and coalesce(row_item ->> 'parse_status', 'valid') = 'valid'
+),
+normalized as (
+  select
+    import_id,
+    fecha,
+    row_number,
+    nullif(payload ->> 'forma_pago', '') as forma_pago,
+    case
+      when payload ->> 'importe' ~ '^-?[0-9]+([.,][0-9]+)?$'
+        then replace(payload ->> 'importe', ',', '.')::numeric
+      else 0
+    end as importe,
+    case
+      when payload ->> 'numero_operaciones' ~ '^-?[0-9]+([.,][0-9]+)?$'
+        then replace(payload ->> 'numero_operaciones', ',', '.')::numeric::integer
+      else 0
+    end as operaciones
+  from source_rows
+)
+insert into public.sales_payment (
+  import_id,
+  row_number,
+  fecha,
+  forma_pago,
+  importe,
+  operaciones
+)
+select
+  import_id,
+  row_number,
+  fecha,
+  forma_pago,
+  greatest(importe, 0),
+  greatest(operaciones, 0)
+from normalized
+where forma_pago is not null
+on conflict (import_id, row_number) do update
+set
+  fecha = excluded.fecha,
+  forma_pago = excluded.forma_pago,
+  importe = excluded.importe,
+  operaciones = excluded.operaciones;
+
 create or replace function public.current_app_role()
 returns public.app_role
 language sql
 stable
 as $$
-  select role from public.profiles where id = auth.uid()
+  select role from public.profiles_subway where id = auth.uid()
 $$;
 
 create or replace function public.is_managerial_role()
@@ -294,7 +480,7 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles (id, full_name, email, role)
+  insert into public.profiles_subway (id, full_name, email, role)
   values (
     new.id,
     coalesce(new.raw_user_meta_data ->> 'full_name', new.email),
@@ -347,9 +533,106 @@ where public.has_fact_scope(negocio_id, linea_id, sector_id, ejecutivo_id)
 group by 1
 order by 2 desc;
 
-alter table public.profiles enable row level security;
+create or replace view public.vw_sales_product_daily as
+select
+  fecha,
+  sum(ventas) as ventas,
+  sum(unidades) as unidades,
+  case
+    when sum(unidades) > 0 then sum(ventas) / sum(unidades)
+    else 0
+  end as ticket_promedio
+from public.sales_product
+group by fecha;
+
+create or replace view public.vw_sales_product_ranking as
+select
+  producto,
+  referencia,
+  categoria,
+  sum(ventas) as ventas,
+  sum(unidades) as unidades,
+  case
+    when sum(unidades) > 0 then sum(ventas) / sum(unidades)
+    else 0
+  end as ticket_promedio
+from public.sales_product
+group by producto, referencia, categoria;
+
+create or replace view public.vw_sales_product_category as
+select
+  categoria,
+  sum(ventas) as ventas,
+  sum(unidades) as unidades,
+  case
+    when sum(unidades) > 0 then sum(ventas) / sum(unidades)
+    else 0
+  end as ticket_promedio
+from public.sales_product
+group by categoria;
+
+create or replace view public.vw_sales_payment_channel as
+select
+  forma_pago,
+  sum(importe) as importe,
+  sum(operaciones) as operaciones,
+  case
+    when sum(operaciones) > 0 then sum(importe) / sum(operaciones)
+    else 0
+  end as ticket_promedio_canal
+from public.sales_payment
+group by forma_pago;
+
+create or replace view public.vw_sales_payment_daily_channel as
+select
+  fecha,
+  forma_pago,
+  sum(importe) as importe,
+  sum(operaciones) as operaciones,
+  case
+    when sum(operaciones) > 0 then sum(importe) / sum(operaciones)
+    else 0
+  end as ticket_promedio_canal
+from public.sales_payment
+group by fecha, forma_pago;
+
+create or replace view public.vw_sales_reconciliation_daily as
+with product_daily as (
+  select
+    fecha,
+    sum(ventas) as ventas_productos,
+    sum(unidades) as unidades
+  from public.sales_product
+  group by fecha
+),
+payment_daily as (
+  select
+    fecha,
+    sum(importe) as importe_pagos,
+    sum(operaciones) as operaciones
+  from public.sales_payment
+  group by fecha
+)
+select
+  coalesce(p.fecha, y.fecha) as fecha,
+  coalesce(p.ventas_productos, 0) as ventas_productos,
+  coalesce(y.importe_pagos, 0) as importe_pagos,
+  coalesce(p.unidades, 0) as unidades,
+  coalesce(y.operaciones, 0) as operaciones,
+  coalesce(p.ventas_productos, 0) - coalesce(y.importe_pagos, 0) as diferencia,
+  case
+    when coalesce(p.ventas_productos, 0) = 0 then null
+    else (
+      coalesce(p.ventas_productos, 0) - coalesce(y.importe_pagos, 0)
+    ) / nullif(p.ventas_productos, 0)
+  end as diferencia_pct
+from product_daily p
+full outer join payment_daily y
+  on y.fecha = p.fecha;
+
+alter table public.profiles_subway enable row level security;
 alter table public.user_scopes enable row level security;
-alter table public.imports enable row level security;
+alter table public.imports_subway enable row level security;
 alter table public.accounting_imports enable row level security;
 alter table public.raw_ax_rows enable row level security;
 alter table public.dim_clientes enable row level security;
@@ -360,12 +643,12 @@ alter table public.dim_ejecutivos enable row level security;
 alter table public.fact_comercial enable row level security;
 
 create policy "profiles_self_or_manager"
-on public.profiles for select
+on public.profiles_subway for select
 to authenticated
 using (auth.uid() = id or public.is_managerial_role());
 
 create policy "profiles_self_update"
-on public.profiles for update
+on public.profiles_subway for update
 to authenticated
 using (auth.uid() = id)
 with check (auth.uid() = id);
@@ -376,7 +659,7 @@ to authenticated
 using (user_id = auth.uid() or public.is_managerial_role());
 
 create policy "imports_role_access"
-on public.imports for select
+on public.imports_subway for select
 to authenticated
 using (
   uploaded_by = auth.uid()
@@ -385,7 +668,7 @@ using (
 );
 
 create policy "imports_insert_uploaders"
-on public.imports for insert
+on public.imports_subway for insert
 to authenticated
 with check (
   uploaded_by = auth.uid() and public.can_upload_imports()
@@ -413,7 +696,7 @@ to authenticated
 using (
   public.is_managerial_role()
   or exists (
-    select 1 from public.imports i
+    select 1 from public.imports_subway i
     where i.id = raw_ax_rows.import_id
       and i.uploaded_by = auth.uid()
   )

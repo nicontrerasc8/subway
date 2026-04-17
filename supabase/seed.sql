@@ -11,7 +11,7 @@ values ('Mineria'), ('Manufactura')
 on conflict (nombre) do nothing;
 
 insert into public.dim_ejecutivos (nombre, email)
-values ('Ana Vega', 'ana.vega@cidelsa.pe'), ('Luis Prado', 'luis.prado@cidelsa.pe')
+values ('Ana Vega', 'ana.vega@subway.pe'), ('Luis Prado', 'luis.prado@subway.pe')
 on conflict (nombre) do nothing;
 
 insert into public.dim_clientes (nombre, ruc)

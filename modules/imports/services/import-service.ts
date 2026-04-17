@@ -14,7 +14,7 @@ import {
   updateImportSchema,
   validateImportFile,
 } from "@/lib/validators/imports";
-import { parseAxWorkbook } from "@/modules/imports/parser/excel";
+import { parseAxWorkbook, type SubwayImportSourceKey } from "@/modules/imports/parser/excel";
 import {
   buildImportAudit,
   parseImportAudit,
@@ -27,7 +27,10 @@ type ImportAccessRole = (typeof importAccessRoles)[number];
 
 type RecentImportRow = ImportRecord & {
   data?: unknown;
-  profiles: Array<{ full_name: string | null; email: string }>;
+  profiles:
+    | Array<{ full_name: string | null; email: string }>
+    | { full_name: string | null; email: string }
+    | null;
 };
 
 type ImportJsonRow = {
@@ -39,22 +42,51 @@ type ImportJsonRow = {
 };
 
 type ImportJsonPayload = {
+  sourceKey: SubwayImportSourceKey;
   sheetName: string;
   columns: string[];
   rows: ImportJsonRow[];
   audit: ImportAudit;
 };
 
+type ImportProfile = { full_name: string | null; email: string };
+type SupabaseAdminClient = ReturnType<typeof createAdminSupabaseClient>;
+
 export function canAccessImports(role: AppRole) {
   return canManageImports(role);
 }
 
 function normalizeImportRecord(row: RecentImportRow): ImportRecord {
+  const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+
   return {
     ...row,
     anio: row.anio ?? null,
-    uploaded_by_profile: row.profiles?.[0] ?? null,
+    uploaded_by_profile: profile ?? null,
   };
+}
+
+async function getProfilesById(userIds: string[]) {
+  const uniqueIds = [...new Set(userIds)].filter(Boolean);
+  if (!uniqueIds.length) return new Map<string, ImportProfile>();
+
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase
+    .from("profiles_subway")
+    .select("id, full_name, email")
+    .in("id", uniqueIds);
+
+  if (error) {
+    console.error("[imports][service] Error al resolver perfiles", error);
+    return new Map<string, ImportProfile>();
+  }
+
+  return new Map(
+    ((data ?? []) as Array<ImportProfile & { id: string }>).map((profile) => [
+      profile.id,
+      { full_name: profile.full_name, email: profile.email },
+    ]),
+  );
 }
 
 function normalizeOptionalText(value: string | null | undefined) {
@@ -65,6 +97,16 @@ function normalizeOptionalText(value: string | null | undefined) {
 function normalizeOptionalDate(value: string | null | undefined) {
   const normalized = normalizeOptionalText(value);
   return normalized ? normalized : null;
+}
+
+function normalizeImportDate(value: string | null | undefined) {
+  const normalized = normalizeOptionalDate(value);
+  if (!normalized) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    throw new Error("La fecha de importacion debe tener formato YYYY-MM-DD.");
+  }
+
+  return normalized;
 }
 
 function normalizeProbability(value: number | null | undefined) {
@@ -96,7 +138,41 @@ function toNullableString(value: unknown) {
   return trimmed ? trimmed : null;
 }
 
-function toNullableBoolean(value: unknown) {
+function toNumber(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value !== "string") return 0;
+
+  const parsed = Number(value.replace(",", ".").trim());
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function toRequiredText(value: unknown, fallback: string) {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed || fallback;
+  }
+
+  if (typeof value === "number") return String(value);
+
+  return fallback;
+}
+
+function getProductCategory(description: string) {
+  const normalized = description
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .trim();
+
+  if (normalized.includes("COMBO")) return "COMBO";
+  if (normalized.includes("BEBIDA") || normalized.includes("GASEOSA") || normalized.includes("AGUA")) return "BEBIDA";
+  if (normalized.includes("EXTRA") || normalized.includes("ADICIONAL")) return "EXTRA";
+  if (normalized.includes("SUB")) return "SUB";
+
+  return "OTROS";
+}
+
+function toNullableBoolean(value: unknown): boolean | null {
   if (typeof value === "boolean") return value;
   return null;
 }
@@ -146,6 +222,10 @@ function normalizeJsonFactRow(importId: string, row: Record<string, unknown>): I
 }
 
 function mapPayloadToLegacyRow(importId: string, rowNumber: number, payload: Record<string, unknown>) {
+  const subwayReference = payload.referencia ?? payload.codigo_articulo;
+  const subwayDescription = payload.descripcion ?? payload.articulo;
+  const subwayUnits = payload.unidades ?? payload.cantidad;
+  const subwayTotal = payload.total ?? payload.ventas_monto;
   const probability = normalizeProbability(toNullableNumber(payload.probabilidad_num));
   const projection = toNullableNumber(payload.proyeccion_monto);
 
@@ -164,15 +244,15 @@ function mapPayloadToLegacyRow(importId: string, rowNumber: number, payload: Rec
     factura: payload.factura,
     oc: payload.oc,
     proyecto: payload.proyecto,
-    codigo_articulo: payload.codigo_articulo,
-    articulo: payload.articulo,
+    codigo_articulo: subwayReference,
+    articulo: subwayDescription,
     etapa: payload.etapa,
     um: payload.um,
     motivo_perdida: payload.motivo_perdida,
     tipo_pipeline: payload.tipo_pipeline,
     licitacion_flag: payload.licitacion_flag,
-    cantidad: payload.cantidad,
-    ventas_monto: payload.ventas_monto,
+    cantidad: subwayUnits,
+    ventas_monto: subwayTotal,
     proyeccion_monto: payload.proyeccion_monto,
     probabilidad_num: probability,
     forecast_ponderado:
@@ -196,6 +276,7 @@ function mapPayloadToLegacyRow(importId: string, rowNumber: number, payload: Rec
 function parseImportData(importId: string, value: unknown): ImportJsonPayload {
   if (!isRecord(value)) {
     return {
+      sourceKey: "ax-commercial",
       sheetName: "",
       columns: [],
       rows: [],
@@ -245,6 +326,8 @@ function parseImportData(importId: string, value: unknown): ImportJsonPayload {
     });
 
   return {
+    sourceKey:
+      value.sourceKey === "ax_forma_pedido" ? "ax_forma_pedido" : "ax-commercial",
     sheetName: typeof value.sheetName === "string" ? value.sheetName : "",
     columns,
     rows,
@@ -252,7 +335,10 @@ function parseImportData(importId: string, value: unknown): ImportJsonPayload {
   };
 }
 
-function buildImportData(parsed: Awaited<ReturnType<typeof parseAxWorkbook>>) {
+function buildImportData(
+  parsed: Awaited<ReturnType<typeof parseAxWorkbook>>,
+  sourceKey: SubwayImportSourceKey,
+) {
   const rows = parsed.parsedRows.map((row) => ({
     id: row.rowNumber,
     row_number: row.rowNumber,
@@ -262,6 +348,7 @@ function buildImportData(parsed: Awaited<ReturnType<typeof parseAxWorkbook>>) {
   })) satisfies ImportJsonRow[];
 
   return {
+    sourceKey,
     sheetName: parsed.sheetName,
     columns: parsed.columns,
     rows,
@@ -275,6 +362,96 @@ function buildImportData(parsed: Awaited<ReturnType<typeof parseAxWorkbook>>) {
   } satisfies ImportJsonPayload;
 }
 
+function buildSalesProductRows(importId: string, fecha: string, data: ImportJsonPayload) {
+  return data.rows
+    .filter((row) => row.parse_status === "valid")
+    .flatMap((row) => {
+      const producto = toRequiredText(row.payload.descripcion ?? row.payload.articulo, "");
+      if (!producto) return [];
+
+      return [
+        {
+          import_id: importId,
+          row_number: row.row_number,
+          fecha,
+          referencia: toNullableString(row.payload.referencia) ?? toNullableString(row.payload.codigo_articulo),
+          producto,
+          categoria: getProductCategory(producto),
+          unidades: toNumber(row.payload.unidades ?? row.payload.cantidad),
+          ventas: toNumber(row.payload.total ?? row.payload.ventas_monto),
+        },
+      ];
+    });
+}
+
+function buildSalesPaymentRows(importId: string, fecha: string, data: ImportJsonPayload) {
+  return data.rows
+    .filter((row) => row.parse_status === "valid")
+    .flatMap((row) => {
+      const formaPago = toRequiredText(row.payload.forma_pago, "");
+      if (!formaPago) return [];
+
+      return [
+        {
+          import_id: importId,
+          row_number: row.row_number,
+          fecha,
+          forma_pago: formaPago,
+          importe: toNumber(row.payload.importe),
+          operaciones: Math.trunc(toNumber(row.payload.numero_operaciones)),
+        },
+      ];
+    });
+}
+
+async function rematerializeSalesFacts(
+  admin: SupabaseAdminClient,
+  importId: string,
+  fecha: string | null,
+  data: ImportJsonPayload,
+) {
+  if (!fecha) {
+    throw new Error("La importacion necesita una fecha para guardar sales_product o sales_payment.");
+  }
+
+  const [{ error: productDeleteError }, { error: paymentDeleteError }] = await Promise.all([
+    admin.from("sales_product").delete().eq("import_id", importId),
+    admin.from("sales_payment").delete().eq("import_id", importId),
+  ]);
+
+  if (productDeleteError || paymentDeleteError) {
+    console.error("[imports][service] Error al limpiar hechos Subway", {
+      productDeleteError,
+      paymentDeleteError,
+    });
+    throw new Error("No se pudieron limpiar las tablas sales_product/sales_payment.");
+  }
+
+  if (data.sourceKey === "ax_forma_pedido") {
+    const paymentRows = buildSalesPaymentRows(importId, fecha, data);
+    if (!paymentRows.length) return;
+
+    const { error } = await admin.from("sales_payment").insert(paymentRows);
+
+    if (error) {
+      console.error("[imports][service] Error al guardar sales_payment", error);
+      throw new Error("No se pudo guardar la importacion en sales_payment.");
+    }
+
+    return;
+  }
+
+  const productRows = buildSalesProductRows(importId, fecha, data);
+  if (!productRows.length) return;
+
+  const { error } = await admin.from("sales_product").insert(productRows);
+
+  if (error) {
+    console.error("[imports][service] Error al guardar sales_product", error);
+    throw new Error("No se pudo guardar la importacion en sales_product.");
+  }
+}
+
 function getImportYearFromData(data: ImportJsonPayload) {
   for (const row of data.rows) {
     const parsedYear = importYearSchema.safeParse(row.payload.anio);
@@ -284,7 +461,7 @@ function getImportYearFromData(data: ImportJsonPayload) {
     }
   }
 
-  return null;
+  return new Date().getFullYear();
 }
 
 function collectNormalizedRows(importId: string, data: ImportJsonPayload) {
@@ -314,34 +491,18 @@ function buildImportDebugRows(data: ImportJsonPayload, limit = 10) {
 function buildImportDebugSummary(data: ImportJsonPayload, limit = 10) {
   return data.rows.slice(0, limit).map((row) => ({
     fila_excel: row.row_number,
-    anio: row.payload.anio ?? null,
-    mes: row.payload.mes ?? null,
-    semana: row.payload.semana ?? null,
-    situacion: row.payload.situacion ?? null,
-    orden_venta: row.payload.orden_venta ?? null,
-    factura: row.payload.factura ?? null,
-    sector_ax: row.payload.sector_ax ?? null,
-    sector: row.payload.sector ?? null,
-    cliente: row.payload.cliente ?? null,
-    negocio: row.payload.negocio ?? null,
-    linea: row.payload.linea ?? null,
-    sublinea: row.payload.sublinea ?? null,
-    grupo: row.payload.grupo ?? null,
-    probabilidad_num: row.payload.probabilidad_num ?? null,
-    ventas_monto: row.payload.ventas_monto ?? null,
-    proyeccion_monto: row.payload.proyeccion_monto ?? null,
-    costo_monto: row.payload.costo_monto ?? null,
-    margen_monto: row.payload.margen_monto ?? null,
-    porcentaje_num: row.payload.porcentaje_num ?? null,
-    ejecutivo: row.payload.ejecutivo ?? null,
+    referencia: row.payload.referencia ?? null,
+    descripcion: row.payload.descripcion ?? null,
+    unidades: row.payload.unidades ?? null,
+    total: row.payload.total ?? null,
   }));
 }
 
 async function getImportRowForEdit(importId: string) {
   const admin = createAdminSupabaseClient();
   const { data, error } = await admin
-    .from("imports")
-    .select("id, data")
+    .from("imports_subway")
+    .select("id, fecha, data")
     .eq("id", importId)
     .single();
 
@@ -349,25 +510,24 @@ async function getImportRowForEdit(importId: string) {
     throw new Error("No se encontro la importacion.");
   }
 
-  return data as { id: string; data?: unknown };
+  return data as { id: string; fecha: string | null; data?: unknown };
 }
 
 export async function createImportFromUpload(
   file: File,
   currentUser: CurrentUser,
+  options: { fecha?: string | null; sourceKey?: SubwayImportSourceKey } = {},
 ) {
   const admin = createAdminSupabaseClient();
   validateImportFile(file);
-  const parsed = await parseAxWorkbook(file);
+  const sourceKey = options.sourceKey ?? "ax-commercial";
+  const parsed = await parseAxWorkbook(file, sourceKey);
   const storagePath = buildImportSourceRef(file.name, currentUser.id);
-  const importData = buildImportData(parsed);
-  const importYear = getImportYearFromData(importData);
+  const importData = buildImportData(parsed, sourceKey);
+  const fecha = normalizeImportDate(options.fecha);
+  const importYear = fecha ? Number(fecha.slice(0, 4)) : getImportYearFromData(importData);
   const validRows = importData.audit.validRows;
   const errorRows = importData.audit.invalidRows;
-
-  if (importYear === null) {
-    throw new Error("No se encontro un año valido en la columna año del Excel.");
-  }
 
   console.groupCollapsed("[imports][service] Resumen de importacion");
   console.log("archivo", file.name);
@@ -386,18 +546,20 @@ export async function createImportFromUpload(
   console.groupEnd();
 
   const { data: importRow, error: importError } = await admin
-    .from("imports")
+    .from("imports_subway")
     .insert({
       file_name: file.name,
       storage_path: storagePath,
       anio: importYear,
+      fecha,
+      source_key: sourceKey,
       uploaded_by: currentUser.id,
       status: "processing",
       total_rows: parsed.parsedRows.length,
       valid_rows: validRows,
       error_rows: errorRows,
       sheet_name: parsed.sheetName,
-      notes: `Hoja ${parsed.sheetName}. Archivo persistido en JSON dentro de imports.data.`,
+      notes: `Hoja ${parsed.sheetName}. Archivo ${sourceKey} persistido en JSON dentro de imports_subway.data.`,
       data: {},
     })
     .select("id")
@@ -417,8 +579,25 @@ export async function createImportFromUpload(
   console.log("audit", importData.audit);
   console.groupEnd();
 
+  try {
+    await rematerializeSalesFacts(admin, importId, fecha, importData);
+  } catch (error) {
+    await admin
+      .from("imports_subway")
+      .update({
+        status: "failed",
+        notes:
+          error instanceof Error
+            ? error.message
+            : "Fallo al materializar la importacion en sales_product/sales_payment.",
+      })
+      .eq("id", importId);
+
+    throw error;
+  }
+
   const { error: updateError } = await admin
-    .from("imports")
+    .from("imports_subway")
     .update({
       status: "processed",
       data: importData,
@@ -428,10 +607,10 @@ export async function createImportFromUpload(
   if (updateError) {
     console.error("[imports][service] Error al guardar JSON de importacion", updateError);
     await admin
-      .from("imports")
+      .from("imports_subway")
       .update({
         status: "failed",
-        notes: "Fallo al guardar el JSON normalizado en imports.data.",
+        notes: "Fallo al guardar el JSON normalizado en imports_subway.data.",
       })
       .eq("id", importId);
 
@@ -460,16 +639,27 @@ export async function listRecentImports() {
 
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
-    .from("imports")
+    .from("imports_subway")
     .select(
-      "id, file_name, storage_path, anio, uploaded_by, uploaded_at, status, total_rows, valid_rows, error_rows, notes, profiles!imports_uploaded_by_fkey(full_name, email)",
+      "id, file_name, storage_path, anio, fecha, source_key, uploaded_by, uploaded_at, status, total_rows, valid_rows, error_rows, notes",
     )
     .order("uploaded_at", { ascending: false })
     .limit(20);
 
-  if (error) return [];
+  if (error) {
+    console.error("[imports][service] Error al listar importaciones", error);
+    return [];
+  }
 
-  return ((data ?? []) as unknown as RecentImportRow[]).map(normalizeImportRecord);
+  const rows = (data ?? []) as unknown as Array<Omit<RecentImportRow, "profiles">>;
+  const profiles = await getProfilesById(rows.map((row) => row.uploaded_by));
+
+  return rows.map((row) =>
+    normalizeImportRecord({
+      ...row,
+      profiles: profiles.get(row.uploaded_by) ?? null,
+    }),
+  );
 }
 
 export async function getImportDetail(importId: string) {
@@ -477,9 +667,9 @@ export async function getImportDetail(importId: string) {
 
   const supabase = await createServerSupabaseClient();
   const { data: importRow, error: importError } = await supabase
-    .from("imports")
+    .from("imports_subway")
     .select(
-      "id, file_name, storage_path, anio, uploaded_by, uploaded_at, status, total_rows, valid_rows, error_rows, notes, data, profiles!imports_uploaded_by_fkey(full_name, email)",
+      "id, file_name, storage_path, anio, fecha, source_key, uploaded_by, uploaded_at, status, total_rows, valid_rows, error_rows, notes, data",
     )
     .eq("id", importId)
     .single();
@@ -489,9 +679,14 @@ export async function getImportDetail(importId: string) {
   }
 
   const importData = parseImportData(importId, (importRow as { data?: unknown }).data);
+  const row = importRow as unknown as Omit<RecentImportRow, "profiles">;
+  const profiles = await getProfilesById([row.uploaded_by]);
 
   return {
-    import: normalizeImportRecord(importRow as unknown as RecentImportRow),
+    import: normalizeImportRecord({
+      ...row,
+      profiles: profiles.get(row.uploaded_by) ?? null,
+    }),
     rows: collectNormalizedRows(importId, importData),
     audit: importData.audit,
   };
@@ -506,7 +701,7 @@ export async function updateImportMetadata(
 
   const admin = createAdminSupabaseClient();
   const { error } = await admin
-    .from("imports")
+    .from("imports_subway")
     .update({ anio: parsed.anio })
     .eq("id", importId);
 
@@ -523,7 +718,7 @@ export async function deleteImport(importId: string) {
 
   const admin = createAdminSupabaseClient();
   const { error } = await admin
-    .from("imports")
+    .from("imports_subway")
     .delete()
     .eq("id", importId);
 
@@ -551,7 +746,7 @@ export async function deleteImportFactRow(importId: string, rowId: number) {
 
   const admin = createAdminSupabaseClient();
   const { error } = await admin
-    .from("imports")
+    .from("imports_subway")
     .update({
       data: {
         ...importData,
@@ -568,8 +763,15 @@ export async function deleteImportFactRow(importId: string, rowId: number) {
     throw new Error("No se pudo eliminar la fila de la importacion.");
   }
 
+  await rematerializeSalesFacts(admin, importId, importRow.fecha, {
+    ...importData,
+    rows: nextRows,
+    audit: nextAudit,
+  });
+
   revalidatePath("/dashboard/imports");
   revalidatePath(`/dashboard/imports/${importId}`);
+  revalidatePath("/dashboard");
 }
 
 export async function updateImportFactRow(
@@ -713,7 +915,7 @@ export async function updateImportFactRow(
 
   const admin = createAdminSupabaseClient();
   const { error } = await admin
-    .from("imports")
+    .from("imports_subway")
     .update({
       data: {
         ...importData,
@@ -730,6 +932,13 @@ export async function updateImportFactRow(
     throw new Error("No se pudo actualizar la fila de la importacion.");
   }
 
+  await rematerializeSalesFacts(admin, importId, importRow.fecha, {
+    ...importData,
+    rows: nextRows,
+    audit: nextAudit,
+  });
+
   revalidatePath("/dashboard/imports");
   revalidatePath(`/dashboard/imports/${importId}`);
+  revalidatePath("/dashboard");
 }

@@ -37,19 +37,15 @@ export function canAccessSellerDashboard(role: AppRole) {
   return (sellerDashboardRoles as readonly AppRole[]).includes(role);
 }
 
-export function getDefaultDashboardPath(role: AppRole) {
-  if (canAccessSellerDashboard(role)) {
-    return "/dashboard/vendedor";
-  }
-
-  if (canManageImports(role)) {
-    return "/dashboard/imports";
-  }
-
-  return "/dashboard/ventas-clientes";
+export function getDefaultDashboardPath() {
+  return "/dashboard";
 }
 
 export function canAccessSidebarPath(role: AppRole, path: string) {
+  if (path === "/dashboard") {
+    return true;
+  }
+
   if (path === "/dashboard/imports") {
     return canManageImports(role);
   }

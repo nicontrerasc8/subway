@@ -36,7 +36,7 @@ export async function getSalesByExecutiveSummary(): Promise<SalesByExecutiveSumm
 
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
-    .from("imports")
+    .from("imports_subway")
     .select("data, status")
     .eq("status", "processed")
     .order("uploaded_at", { ascending: false });

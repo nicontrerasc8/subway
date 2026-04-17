@@ -28,6 +28,24 @@ export function formatDate(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
+export function formatDateOnly(value: string | null | undefined) {
+  if (!value) return "Sin fecha";
+
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+
+  if (dateOnlyMatch) {
+    const [, year, month, day] = dateOnlyMatch;
+
+    return new Intl.DateTimeFormat("es-PE", {
+      dateStyle: "medium",
+    }).format(new Date(Number(year), Number(month) - 1, Number(day)));
+  }
+
+  return new Intl.DateTimeFormat("es-PE", {
+    dateStyle: "medium",
+  }).format(new Date(value));
+}
+
 export function chunk<T>(items: T[], size: number) {
   const chunks: T[][] = [];
 

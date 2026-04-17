@@ -47,7 +47,7 @@ export async function getExecutiveImportRows() {
 
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
-    .from("imports")
+    .from("imports_subway")
     .select("anio, data, status")
     .eq("status", "processed")
     .order("anio", { ascending: false });

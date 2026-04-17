@@ -7,7 +7,7 @@ export default async function HomePage() {
   const user = await getCurrentUser();
 
   if (user) {
-    redirect(getDefaultDashboardPath(user.role));
+    redirect(getDefaultDashboardPath());
   }
 
   redirect("/login");

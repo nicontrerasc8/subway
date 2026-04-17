@@ -19,6 +19,8 @@ export interface ImportRecord {
   file_name: string;
   storage_path: string | null;
   anio: number | null;
+  fecha: string | null;
+  source_key?: string | null;
   uploaded_by: string;
   uploaded_at: string;
   status: "pending" | "processing" | "processed" | "failed";

@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Cidelsa ",
+  title: "Subway",
   description: "Dashboard gerencial interno para analitica comercial e importaciones AX.",
 };
 

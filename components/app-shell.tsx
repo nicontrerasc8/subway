@@ -2,17 +2,11 @@
 
 import { useState } from "react";
 import {
-  BriefcaseBusiness,
   Building2,
-  FolderKanban,
-  GitCompareArrows,
+  LayoutDashboard,
   LogOut,
   Menu,
-  TrendingUp,
   UploadCloud,
-  User,
-  UserRound,
-  UsersRound,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -24,82 +18,19 @@ import { logoutAction } from "@/modules/auth/server/actions";
 
 const navigation = [
   {
-    href: "/dashboard/ventas-clientes",
-    label: "Ventas por Cliente",
-    icon: UsersRound,
-  },
-  {
-    href: "/dashboard/comparativo-anual",
-    label: "Comparativo Anual",
-    icon: TrendingUp,
-  },
-  {
-    href: "/dashboard/backlog",
-    label: "Backlog",
-    icon: FolderKanban,
-  },
-  {
-    href: "/dashboard/proyeccion",
-    label: "Proyeccion",
-    icon: FolderKanban,
-  },
-  {
-    href: "/dashboard/facturacion-linea",
-    label: "Facturacion por Linea",
-    icon: BriefcaseBusiness,
-  },
-  {
-    href: "/dashboard/ejecutivos",
-    label: "Ejecutivos",
-    icon: UserRound,
-  },
-  {
-    href: "/dashboard/variaciones",
-    label: "Contabilidad",
-    icon: GitCompareArrows,
+    href: "/dashboard",
+    label: "Dashboard",
+    icon: LayoutDashboard,
   },
   {
     href: "/dashboard/imports",
     label: "Importaciones",
     icon: UploadCloud,
   },
-  {
-    href: "/dashboard/vendedor",
-    label: "Mi panel",
-    icon: User,
-  },
-  {
-    href: "/dashboard/vendedor/clientes",
-    label: "Mis clientes",
-    icon: UsersRound,
-  },
-  {
-    href: "/dashboard/vendedor/comparativo-anual",
-    label: "Mi historico",
-    icon: TrendingUp,
-  },
-  {
-    href: "/dashboard/vendedor/facturacion-linea",
-    label: "Mis lineas",
-    icon: BriefcaseBusiness,
-  },
-  {
-    href: "/dashboard/vendedor/backlog",
-    label: "Mi backlog",
-    icon: FolderKanban,
-  },
-  {
-    href: "/dashboard/vendedor/proyeccion",
-    label: "Mi proyeccion",
-    icon: GitCompareArrows,
-  },
 ];
 
 function isActivePath(pathname: string, href: string) {
   if (pathname === href) return true;
-  if (href === "/dashboard/vendedor") {
-    return pathname.startsWith("/dashboard/vendedor");
-  }
   return false;
 }
 
@@ -122,7 +53,7 @@ function SidebarContent({
             <Building2 className="size-6" />
           </div>
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-300">Cidelsa</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-300">Subway</p>
           </div>
         </div>
 
@@ -185,7 +116,7 @@ export function AppShell({
               <Building2 className="size-5" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Cidelsa</p>
+              <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Subway</p>
               <p className="truncate text-sm font-semibold text-foreground">{roleLabels[user.role]}</p>
             </div>
           </div>

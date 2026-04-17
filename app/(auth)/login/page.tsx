@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation";
-import { getOptionalSession } from "@/lib/auth/session";
+import { getDefaultDashboardPath } from "@/lib/auth/roles";
+import { getCurrentUser } from "@/lib/auth/session";
 import { LoginForm } from "@/modules/auth/components/login-form";
 
 export default async function LoginPage() {
-  const session = await getOptionalSession();
+  const user = await getCurrentUser();
 
-  if (session) {
-    redirect("/dashboard");
+  if (user) {
+    redirect(getDefaultDashboardPath());
   }
 
   return (
@@ -22,7 +23,7 @@ export default async function LoginPage() {
         {/* Header del Login */}
         <div className="mb-8 text-center sm:text-left">
           <div className="inline-flex items-center rounded-full border border-primary/10 bg-primary/5 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-primary">
-            Cidelsa 
+            Subway
           </div>
           <h1 className="mt-6 text-4xl font-bold tracking-tight text-foreground">
             Bienvenido
@@ -36,7 +37,7 @@ export default async function LoginPage() {
         <LoginForm />
         
         <p className="mt-8 text-center text-xs text-muted-foreground">
-          &copy; {new Date().getFullYear()} Cidelsa. Todos los derechos reservados.
+          &copy; {new Date().getFullYear()} Subway. Todos los derechos reservados.
         </p>
       </section>
     </main>

@@ -6,8 +6,8 @@ import { formatCurrency, formatNumber } from "@/lib/utils";
 const toneMap = {
   default: "bg-secondary text-secondary-foreground",
   primary: "bg-primary text-primary-foreground",
-  success: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
-  warning: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
+  success: "bg-emerald-100 text-emerald-700",
+  warning: "bg-amber-100 text-amber-700",
 } as const;
 
 export function KpiCard({
