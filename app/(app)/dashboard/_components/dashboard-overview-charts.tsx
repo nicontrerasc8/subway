@@ -1,10 +1,10 @@
 "use client";
 
-import { Pie, PieChart, Cell, Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Pie, PieChart, Cell, Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import type { DashboardOverviewPoint } from "@/modules/dashboard/services/dashboard-overview";
 import type { DashboardBranchesChartPoint } from "@/modules/dashboard/services/dashboard-branches";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatNumber } from "@/lib/utils";
 
 const COLORS = ["#008938", "#ffc20a", "#2563eb", "#ef4444", "#14b8a6", "#f97316"];
 
@@ -25,6 +25,31 @@ function CurrencyTooltip({
       {payload.map((entry, index) => (
         <p key={`${entry.name ?? "value"}-${index}`} className="text-sm font-medium">
           {entry.name}: {formatCurrency(Number(entry.value ?? 0))}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function ValueTooltip({
+  active,
+  payload,
+  label,
+  valueFormatter,
+}: {
+  active?: boolean;
+  payload?: Array<{ value?: number | string; name?: string }>;
+  label?: string;
+  valueFormatter: (value: number) => string;
+}) {
+  if (!active || !payload?.length) return null;
+
+  return (
+    <div className="rounded-xl border bg-background px-3 py-2 shadow-lg">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      {payload.map((entry, index) => (
+        <p key={`${entry.name ?? "value"}-${index}`} className="text-sm font-medium">
+          {entry.name}: {valueFormatter(Number(entry.value ?? 0))}
         </p>
       ))}
     </div>
@@ -92,6 +117,7 @@ export function DashboardBranchesMultiLineChart({
         <XAxis dataKey="label" tick={{ fontSize: 12 }} minTickGap={24} />
         <YAxis tickFormatter={(value) => formatCurrency(Number(value))} width={88} tick={{ fontSize: 12 }} />
         <Tooltip content={<CurrencyTooltip />} />
+        <Legend />
         {keys.map((key, index) => (
           <Line
             key={key}
@@ -121,6 +147,7 @@ export function DashboardBranchesMultiBarChart({
         <XAxis dataKey="label" tick={{ fontSize: 12 }} />
         <YAxis tickFormatter={(value) => formatCurrency(Number(value))} width={88} tick={{ fontSize: 12 }} />
         <Tooltip content={<CurrencyTooltip />} />
+        <Legend />
         {keys.map((key, index) => (
           <Bar key={key} dataKey={key} fill={COLORS[index % COLORS.length]} radius={[6, 6, 0, 0]} />
         ))}
@@ -131,17 +158,23 @@ export function DashboardBranchesMultiBarChart({
 
 export function DashboardSimpleBarChart({
   data,
+  name = "Valor",
+  valueFormat = "currency",
 }: {
   data: DashboardOverviewPoint[];
+  name?: string;
+  valueFormat?: "currency" | "number";
 }) {
+  const valueFormatter = valueFormat === "number" ? formatNumber : formatCurrency;
+
   return (
     <ResponsiveContainer width="100%" height={320}>
       <BarChart data={data} margin={{ top: 16, right: 16, left: 4, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" vertical={false} />
         <XAxis dataKey="label" tick={{ fontSize: 12 }} interval={0} angle={-16} textAnchor="end" height={72} />
-        <YAxis tickFormatter={(value) => formatCurrency(Number(value))} width={88} tick={{ fontSize: 12 }} />
-        <Tooltip content={<CurrencyTooltip />} />
-        <Bar dataKey="value" fill="#008938" radius={[6, 6, 0, 0]} />
+        <YAxis tickFormatter={(value) => valueFormatter(Number(value))} width={88} tick={{ fontSize: 12 }} />
+        <Tooltip content={<ValueTooltip valueFormatter={valueFormatter} />} />
+        <Bar dataKey="value" fill="#008938" radius={[6, 6, 0, 0]} name={name} />
       </BarChart>
     </ResponsiveContainer>
   );

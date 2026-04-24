@@ -1,10 +1,18 @@
 import "server-only";
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import {
+  formatDateRangeLabel,
+  getDateYear,
+  getMonthLabel,
+  matchesDateRange,
+  matchesMonthlyRange,
+  resolveDateRangeFilters,
+  type DashboardDateRangeFilters,
+  type DashboardDateRangeSearchParams,
+} from "@/modules/dashboard/lib/date-range-filters";
 
 const PAGE_SIZE = 1000;
-
-type SearchParamValue = string | string[] | undefined;
 
 type CategoryDailyRow = {
   fecha: string | null;
@@ -52,15 +60,9 @@ type ProductGlobalRow = {
   ventas: number | string | null;
 };
 
-export type DashboardMixFilters = {
-  year: string | null;
-  month: string | null;
-};
+export type DashboardMixFilters = DashboardDateRangeFilters;
 
-export type DashboardMixSearchParams = {
-  year?: SearchParamValue;
-  month?: SearchParamValue;
-};
+export type DashboardMixSearchParams = DashboardDateRangeSearchParams;
 
 export type DashboardMixPoint = {
   label: string;
@@ -96,31 +98,11 @@ export type DashboardMixData = {
   topBranches: DashboardMixBranchPoint[];
 };
 
-function getParam(value: SearchParamValue) {
-  return Array.isArray(value) ? value[0] : value;
-}
-
 function toNumber(value: unknown) {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   if (typeof value !== "string") return 0;
   const parsed = Number(value.replace(",", ".").trim());
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function getDateYear(value: string | null) {
-  if (!value) return null;
-  return value.slice(0, 4);
-}
-
-function getDateMonth(value: string | null) {
-  if (!value) return null;
-  return String(Number(value.slice(5, 7)));
-}
-
-function getMonthLabel(month: string) {
-  return new Intl.DateTimeFormat("es-PE", { month: "short" }).format(
-    new Date(2024, Number(month) - 1, 1),
-  );
 }
 
 async function fetchAllRows<T>(view: string, columns: string) {
@@ -147,35 +129,24 @@ async function fetchAllRows<T>(view: string, columns: string) {
 }
 
 function resolveFilters(searchParams: DashboardMixSearchParams, rows: CategoryDailyRow[]) {
-  const requestedYear = getParam(searchParams.year);
-  const requestedMonth = getParam(searchParams.month);
-
   const availableYears = Array.from(
     new Set(rows.map((row) => getDateYear(row.fecha)).filter(Boolean) as string[]),
   ).sort((a, b) => Number(b) - Number(a));
-  const availableMonths = Array.from({ length: 12 }, (_, index) => String(index + 1));
-
-  const filters: DashboardMixFilters = {
-    year: requestedYear && availableYears.includes(requestedYear) ? requestedYear : availableYears[0] ?? null,
-    month: requestedMonth && availableMonths.includes(requestedMonth) ? requestedMonth : null,
-  };
+  const filters = resolveDateRangeFilters(searchParams, availableYears);
 
   return {
     filters,
     availableYears,
-    availableMonths,
+    availableMonths: [],
     activePeriodLabel: [
-      filters.year ? `Ano ${filters.year}` : "Todos los anos",
-      filters.month ? getMonthLabel(filters.month) : "Todos los meses",
+      formatDateRangeLabel(filters),
       "Mix comercial",
     ].join(" · "),
   };
 }
 
 function matchesFilters(row: { fecha: string | null }, filters: DashboardMixFilters) {
-  if (filters.year && getDateYear(row.fecha) !== filters.year) return false;
-  if (filters.month && getDateMonth(row.fecha) !== filters.month) return false;
-  return true;
+  return matchesDateRange(row.fecha, filters);
 }
 
 export async function getDashboardMix(
@@ -208,11 +179,9 @@ export async function getDashboardMix(
   const filteredCategories = categoryRows.filter((row) => matchesFilters(row, filters));
   const filteredProducts = productRows.filter((row) => matchesFilters(row, filters));
   const filteredBranches = branchRows.filter((row) => matchesFilters(row, filters));
-  const filteredCategoryMonthly = categoryMonthlyRows.filter((row) => {
-    if (filters.year && String(row.anio) !== filters.year) return false;
-    if (filters.month && String(row.mes_num) !== filters.month) return false;
-    return true;
-  });
+  const filteredCategoryMonthly = categoryMonthlyRows.filter((row) =>
+    matchesMonthlyRange(row, filters),
+  );
 
   const topCategories = Array.from(
     filteredCategories.reduce((map, row) => {
@@ -271,7 +240,7 @@ export async function getDashboardMix(
   const categoryKeySet = new Set<string>();
 
   for (const row of filteredCategoryMonthly) {
-    const monthLabel = row.mes_num ? getMonthLabel(String(row.mes_num)) : "Sin mes";
+    const monthLabel = row.mes_num ? getMonthLabel(String(row.mes_num), "short") : "Sin mes";
     const category = row.categoria ?? "Sin categoria";
     categoryKeySet.add(category);
 

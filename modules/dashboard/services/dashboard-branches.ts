@@ -1,10 +1,20 @@
 import "server-only";
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import {
+  formatDateRangeLabel,
+  getDateMonth,
+  getDateYear,
+  getMonthLabel,
+  getSearchParamValue,
+  matchesDateRange,
+  matchesMonthlyRange,
+  resolveDateRangeFilters,
+  type DashboardDateRangeFilters,
+  type DashboardDateRangeSearchParams,
+} from "@/modules/dashboard/lib/date-range-filters";
 
 const PAGE_SIZE = 1000;
-
-type SearchParamValue = string | string[] | undefined;
 
 type DailyBranchRow = {
   fecha: string | null;
@@ -27,14 +37,12 @@ type MonthlyBranchRow = {
   ventas: number | string | null;
 };
 
-export type DashboardBranchesFilters = {
-  year: string | null;
-  month: string | null;
+export type DashboardBranchesFilters = DashboardDateRangeFilters & {
+  branch: string | null;
 };
 
-export type DashboardBranchesSearchParams = {
-  year?: SearchParamValue;
-  month?: SearchParamValue;
+export type DashboardBranchesSearchParams = DashboardDateRangeSearchParams & {
+  branch?: string | string[];
 };
 
 export type DashboardBranchesKpis = {
@@ -65,6 +73,7 @@ export type DashboardBranchesData = {
   filters: DashboardBranchesFilters;
   availableYears: string[];
   availableMonths: string[];
+  availableBranches: Array<{ id: string; label: string }>;
   activePeriodLabel: string;
   branchKeys: string[];
   kpis: DashboardBranchesKpis;
@@ -73,31 +82,11 @@ export type DashboardBranchesData = {
   monthlyTrend: DashboardBranchesChartPoint[];
 };
 
-function getParam(value: SearchParamValue) {
-  return Array.isArray(value) ? value[0] : value;
-}
-
 function toNumber(value: unknown) {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   if (typeof value !== "string") return 0;
   const parsed = Number(value.replace(",", ".").trim());
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function getDateYear(value: string | null) {
-  if (!value) return null;
-  return value.slice(0, 4);
-}
-
-function getDateMonth(value: string | null) {
-  if (!value) return null;
-  return String(Number(value.slice(5, 7)));
-}
-
-function getMonthLabel(month: string) {
-  return new Intl.DateTimeFormat("es-PE", { month: "short" }).format(
-    new Date(2024, Number(month) - 1, 1),
-  );
 }
 
 async function fetchAllRows<T>(view: string, columns: string) {
@@ -127,35 +116,61 @@ function resolveFilters(
   searchParams: DashboardBranchesSearchParams,
   dailyRows: DailyBranchRow[],
 ) {
-  const requestedYear = getParam(searchParams.year);
-  const requestedMonth = getParam(searchParams.month);
-
   const availableYears = Array.from(
     new Set(dailyRows.map((row) => getDateYear(row.fecha)).filter(Boolean) as string[]),
   ).sort((a, b) => Number(b) - Number(a));
-  const availableMonths = Array.from({ length: 12 }, (_, index) => String(index + 1));
-
+  const availableBranches = Array.from(
+    new Map(
+      dailyRows
+        .filter((row) => row.sucursal_id !== null)
+        .map((row) => [
+          String(row.sucursal_id),
+          { id: String(row.sucursal_id), label: row.sucursal ?? `Sucursal ${row.sucursal_id}` },
+        ]),
+    ).values(),
+  ).sort((a, b) => a.label.localeCompare(b.label));
+  const requestedBranch = getSearchParamValue(searchParams.branch);
+  const dateRangeFilters = resolveDateRangeFilters(searchParams, availableYears);
   const filters: DashboardBranchesFilters = {
-    year: requestedYear && availableYears.includes(requestedYear) ? requestedYear : availableYears[0] ?? null,
-    month: requestedMonth && availableMonths.includes(requestedMonth) ? requestedMonth : null,
+    ...dateRangeFilters,
+    branch:
+      requestedBranch && availableBranches.some((branch) => branch.id === requestedBranch)
+        ? requestedBranch
+        : null,
   };
 
   return {
     filters,
     availableYears,
-    availableMonths,
+    availableMonths: [],
+    availableBranches,
     activePeriodLabel: [
-      filters.year ? `Ano ${filters.year}` : "Todos los anos",
-      filters.month ? getMonthLabel(filters.month) : "Todos los meses",
+      formatDateRangeLabel(filters),
+      filters.branch
+        ? availableBranches.find((branch) => branch.id === filters.branch)?.label ?? "Sucursal"
+        : "Todas las sucursales",
       "Comparativo entre sucursales",
     ].join(" · "),
   };
 }
 
-function matchesFilters(row: { fecha: string | null }, filters: DashboardBranchesFilters) {
-  if (filters.year && getDateYear(row.fecha) !== filters.year) return false;
-  if (filters.month && getDateMonth(row.fecha) !== filters.month) return false;
+function matchesFilters(row: { fecha: string | null; sucursal_id: number | null }, filters: DashboardBranchesFilters) {
+  if (!matchesDateRange(row.fecha, filters)) return false;
+  if (filters.branch && String(row.sucursal_id) !== filters.branch) return false;
   return true;
+}
+
+function getDayComparisonKey(fecha: string | null) {
+  if (!fecha) return null;
+
+  const month = getDateMonth(fecha);
+  const day = Number(fecha.slice(8, 10));
+  if (!month || !day) return null;
+
+  return {
+    key: `${month.padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+    label: `${day} ${getMonthLabel(month, "short")}`,
+  };
 }
 
 export async function getDashboardBranches(
@@ -172,21 +187,18 @@ export async function getDashboardBranches(
     ),
   ]);
 
-  const { filters, availableYears, availableMonths, activePeriodLabel } = resolveFilters(searchParams, dailyRows);
+  const { filters, availableYears, availableMonths, availableBranches, activePeriodLabel } = resolveFilters(searchParams, dailyRows);
 
   const filteredDaily = dailyRows.filter((row) => matchesFilters(row, filters));
   const filteredMonthly = monthlyRows.filter((row) => {
-    if (filters.year && String(row.anio) !== filters.year) return false;
+    if (!matchesMonthlyRange(row, filters)) return false;
+    if (filters.branch && String(row.sucursal_id) !== filters.branch) return false;
     return true;
   });
 
-  const branchNames = Array.from(
-    new Map(
-      filteredDaily
-        .filter((row) => row.sucursal_id !== null)
-        .map((row) => [String(row.sucursal_id), row.sucursal ?? `Sucursal ${row.sucursal_id}`]),
-    ).values(),
-  ).sort((a, b) => a.localeCompare(b));
+  const comparisonYears = Array.from(
+    new Set(filteredDaily.map((row) => getDateYear(row.fecha)).filter(Boolean) as string[]),
+  ).sort((a, b) => Number(a) - Number(b));
 
   const branchRanking = Array.from(
     filteredDaily.reduce((map, row) => {
@@ -225,10 +237,13 @@ export async function getDashboardBranches(
 
   const dailyTrend = Array.from(
     filteredDaily.reduce((map, row) => {
-      const key = row.fecha ?? "";
-      const entry = map.get(key) ?? { label: key };
-      entry[row.sucursal ?? "Sin sucursal"] = toNumber(row.ventas_totales);
-      map.set(key, entry);
+      const year = getDateYear(row.fecha);
+      const dayKey = getDayComparisonKey(row.fecha);
+      if (!year || !dayKey) return map;
+
+      const entry = map.get(dayKey.key) ?? { label: dayKey.label };
+      entry[year] = Number(entry[year] ?? 0) + toNumber(row.ventas_totales);
+      map.set(dayKey.key, entry);
       return map;
     }, new Map<string, DashboardBranchesChartPoint>()),
   )
@@ -237,13 +252,19 @@ export async function getDashboardBranches(
 
   const monthlyTrend = Array.from(
     filteredMonthly.reduce((map, row) => {
-      const monthLabel = row.mes_num ? getMonthLabel(String(row.mes_num)) : "Sin mes";
-      const entry = map.get(monthLabel) ?? { label: monthLabel };
-      entry[row.sucursal ?? "Sin sucursal"] = (Number(entry[row.sucursal ?? "Sin sucursal"] ?? 0) + toNumber(row.ventas));
-      map.set(monthLabel, entry);
+      if (!row.anio || !row.mes_num) return map;
+
+      const monthKey = String(row.mes_num).padStart(2, "0");
+      const monthLabel = getMonthLabel(String(row.mes_num), "short");
+      const year = String(row.anio);
+      const entry = map.get(monthKey) ?? { label: monthLabel };
+      entry[year] = Number(entry[year] ?? 0) + toNumber(row.ventas);
+      map.set(monthKey, entry);
       return map;
     }, new Map<string, DashboardBranchesChartPoint>()),
-  ).map(([, value]) => value);
+  )
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([, value]) => value);
 
   const totalSales = filteredDaily.reduce((sum, row) => sum + toNumber(row.ventas_totales), 0);
   const totalUnits = filteredDaily.reduce((sum, row) => sum + toNumber(row.unidades_totales), 0);
@@ -254,8 +275,9 @@ export async function getDashboardBranches(
     filters,
     availableYears,
     availableMonths,
+    availableBranches,
     activePeriodLabel,
-    branchKeys: branchNames,
+    branchKeys: comparisonYears,
     kpis: {
       totalSales,
       totalUnits,

@@ -1,53 +1,17 @@
-import Link from "next/link";
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatCurrency, formatDateOnly, formatNumber } from "@/lib/utils";
-import { cn } from "@/lib/utils";
-import { DashboardDailySalesChart, DashboardMixChart, DashboardMonthlySalesChart } from "@/app/(app)/dashboard/_components/dashboard-overview-charts";
+import { formatCurrency, formatNumber } from "@/lib/utils";
+import {
+  DashboardBranchesMultiBarChart,
+  DashboardDailySalesChart,
+  DashboardMixChart,
+  DashboardMonthlySalesChart,
+} from "@/app/(app)/dashboard/_components/dashboard-overview-charts";
+import { DashboardRangeFilterForm } from "@/app/(app)/dashboard/_components/dashboard-range-filter-form";
 import { getDashboardOverview, type DashboardOverviewSearchParams } from "@/modules/dashboard/services/dashboard-overview";
 
 type DashboardPageProps = {
   searchParams: Promise<DashboardOverviewSearchParams>;
 };
-
-function buildHref(
-  current: { year: string | null; month: string | null; branch: string | null },
-  patch: Partial<{ year: string | null; month: string | null; branch: string | null }>,
-) {
-  const params = new URLSearchParams();
-  const next = { ...current, ...patch };
-
-  if (next.year) params.set("year", next.year);
-  if (next.month) params.set("month", next.month);
-  if (next.branch) params.set("branch", next.branch);
-
-  const query = params.toString();
-  return query ? `/dashboard?${query}` : "/dashboard";
-}
-
-function FilterChip({
-  href,
-  active,
-  label,
-}: {
-  href: string;
-  active: boolean;
-  label: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className={cn(
-        "rounded-full border px-3 py-1.5 text-sm transition",
-        active
-          ? "border-foreground bg-foreground text-background"
-          : "border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground",
-      )}
-    >
-      {label}
-    </Link>
-  );
-}
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const resolvedSearchParams = await searchParams;
@@ -60,9 +24,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         <h1 className="mt-3 max-w-3xl text-4xl font-semibold tracking-tight text-foreground">
           Ventas, ticket y cuadre por sucursal desde la capa normalizada
         </h1>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
-          La portada ya trabaja sobre `v_kpi_daily_branch_full`, `v_sales_branch_monthly`, mix comercial y validacion de cuadre.
-        </p>
+
         <div className="mt-5 inline-flex rounded-full border border-border bg-background/80 px-4 py-2 text-sm text-muted-foreground">
           {dashboard.activePeriodLabel}
         </div>
@@ -74,57 +36,13 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             <CardTitle>Filtros</CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Ano</p>
-              <div className="flex flex-wrap gap-2">
-                {dashboard.availableYears.map((year) => (
-                  <FilterChip
-                    key={year}
-                    href={buildHref(dashboard.filters, { year, month: null })}
-                    active={dashboard.filters.year === year}
-                    label={year}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Mes</p>
-              <div className="flex flex-wrap gap-2">
-                <FilterChip
-                  href={buildHref(dashboard.filters, { month: null })}
-                  active={dashboard.filters.month === null}
-                  label="Todos"
-                />
-                {dashboard.availableMonths.map((month) => (
-                  <FilterChip
-                    key={month}
-                    href={buildHref(dashboard.filters, { month })}
-                    active={dashboard.filters.month === month}
-                    label={month}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Sucursal</p>
-              <div className="flex flex-wrap gap-2">
-                <FilterChip
-                  href={buildHref(dashboard.filters, { branch: null })}
-                  active={dashboard.filters.branch === null}
-                  label="Todas"
-                />
-                {dashboard.availableBranches.map((branch) => (
-                  <FilterChip
-                    key={branch.id}
-                    href={buildHref(dashboard.filters, { branch: branch.id })}
-                    active={dashboard.filters.branch === branch.id}
-                    label={branch.label}
-                  />
-                ))}
-              </div>
-            </div>
+            <DashboardRangeFilterForm
+              action="/dashboard"
+              filters={dashboard.filters}
+              availableYears={dashboard.availableYears}
+              branch={dashboard.filters.branch}
+              branches={dashboard.availableBranches}
+            />
           </CardContent>
         </Card>
 
@@ -158,10 +76,10 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle>Productos por dia</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Productos por día</CardTitle></CardHeader>
             <CardContent>
               <p className="text-3xl font-semibold">{formatNumber(dashboard.kpis.averageDailyProducts)}</p>
-              <p className="mt-2 text-sm text-muted-foreground">Promedio de SKUs visibles por dia.</p>
+              <p className="mt-2 text-sm text-muted-foreground">Promedio de SKUs visibles por día.</p>
             </CardContent>
           </Card>
           <Card>
@@ -187,8 +105,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
         <Card>
           <CardHeader>
-            <CardTitle>Tendencia mensual</CardTitle>
-            <p className="text-sm text-muted-foreground">Serie mensual del ano seleccionado.</p>
+            <CardTitle>Comparativo mensual</CardTitle>
+            <p className="text-sm text-muted-foreground">Compara meses separados por año cuando el rango incluye varios años.</p>
           </CardHeader>
           <CardContent>
             <DashboardMonthlySalesChart data={dashboard.monthlySales} />
@@ -196,10 +114,27 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         </Card>
       </section>
 
+      <section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Días por categoría</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Ventas diarias abiertas por categoría para comparar días entre los meses y años seleccionados.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <DashboardBranchesMultiBarChart
+              data={dashboard.dailyCategorySales}
+              keys={dashboard.categoryDailyKeys}
+            />
+          </CardContent>
+        </Card>
+      </section>
+
       <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
         <Card>
           <CardHeader>
-            <CardTitle>Sucursales lideres</CardTitle>
+            <CardTitle>Sucursales líderes</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {dashboard.branchRanking.length ? (
@@ -230,7 +165,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         <div className="grid gap-4">
           <Card>
             <CardHeader>
-              <CardTitle>Mix por categoria</CardTitle>
+              <CardTitle>Mix por categoría</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-3 lg:grid-cols-[220px_1fr] lg:items-center">
               <DashboardMixChart data={dashboard.categoryMix} />
@@ -295,7 +230,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </CardContent>
         </Card>
 
-        <Card>
+        {/* <Card>
           <CardHeader>
             <CardTitle>Alertas de cuadre</CardTitle>
           </CardHeader>
@@ -323,7 +258,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               <p className="text-sm text-muted-foreground">No hay diferencias visibles en los imports filtrados.</p>
             )}
           </CardContent>
-        </Card>
+        </Card> */}
       </section>
     </div>
   );

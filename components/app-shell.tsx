@@ -32,11 +32,11 @@ const navigation = [
     label: "Pagos",
     icon: LayoutDashboard,
   },
-  {
-    href: "/dashboard/subway/auditoria",
-    label: "Auditoria",
-    icon: LayoutDashboard,
-  },
+  // {
+  //   href: "/dashboard/subway/auditoria",
+  //   label: "Auditoria",
+  //   icon: LayoutDashboard,
+  // },
   {
     href: "/dashboard/subway/cruce",
     label: "Mix",

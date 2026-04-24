@@ -1,10 +1,16 @@
 import "server-only";
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import {
+  formatDateRangeLabel,
+  getDateYear,
+  matchesDateRange,
+  resolveDateRangeFilters,
+  type DashboardDateRangeFilters,
+  type DashboardDateRangeSearchParams,
+} from "@/modules/dashboard/lib/date-range-filters";
 
 const PAGE_SIZE = 1000;
-
-type SearchParamValue = string | string[] | undefined;
 
 type ReconciliationRow = {
   import_id: string | null;
@@ -18,15 +24,8 @@ type ReconciliationRow = {
   diferencia: number | string | null;
 };
 
-export type DashboardAuditFilters = {
-  year: string | null;
-  month: string | null;
-};
-
-export type DashboardAuditSearchParams = {
-  year?: SearchParamValue;
-  month?: SearchParamValue;
-};
+export type DashboardAuditFilters = DashboardDateRangeFilters;
+export type DashboardAuditSearchParams = DashboardDateRangeSearchParams;
 
 export type DashboardAuditKpis = {
   totalImports: number;
@@ -65,31 +64,11 @@ export type DashboardAuditData = {
   recentImports: DashboardAuditImportPoint[];
 };
 
-function getParam(value: SearchParamValue) {
-  return Array.isArray(value) ? value[0] : value;
-}
-
 function toNumber(value: unknown) {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   if (typeof value !== "string") return 0;
   const parsed = Number(value.replace(",", ".").trim());
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function getDateYear(value: string | null) {
-  if (!value) return null;
-  return value.slice(0, 4);
-}
-
-function getDateMonth(value: string | null) {
-  if (!value) return null;
-  return String(Number(value.slice(5, 7)));
-}
-
-function getMonthLabel(month: string) {
-  return new Intl.DateTimeFormat("es-PE", { month: "short" }).format(
-    new Date(2024, Number(month) - 1, 1),
-  );
 }
 
 async function fetchAllRows<T>(view: string, columns: string) {
@@ -116,35 +95,17 @@ async function fetchAllRows<T>(view: string, columns: string) {
 }
 
 function resolveFilters(searchParams: DashboardAuditSearchParams, rows: ReconciliationRow[]) {
-  const requestedYear = getParam(searchParams.year);
-  const requestedMonth = getParam(searchParams.month);
-
   const availableYears = Array.from(
     new Set(rows.map((row) => getDateYear(row.fecha)).filter(Boolean) as string[]),
   ).sort((a, b) => Number(b) - Number(a));
-  const availableMonths = Array.from({ length: 12 }, (_, index) => String(index + 1));
-
-  const filters: DashboardAuditFilters = {
-    year: requestedYear && availableYears.includes(requestedYear) ? requestedYear : availableYears[0] ?? null,
-    month: requestedMonth && availableMonths.includes(requestedMonth) ? requestedMonth : null,
-  };
+  const filters = resolveDateRangeFilters(searchParams, availableYears);
 
   return {
     filters,
     availableYears,
-    availableMonths,
-    activePeriodLabel: [
-      filters.year ? `Ano ${filters.year}` : "Todos los anos",
-      filters.month ? getMonthLabel(filters.month) : "Todos los meses",
-      "Control de cuadre",
-    ].join(" · "),
+    availableMonths: [],
+    activePeriodLabel: [formatDateRangeLabel(filters), "Control de cuadre"].join(" · "),
   };
-}
-
-function matchesFilters(row: { fecha: string | null }, filters: DashboardAuditFilters) {
-  if (filters.year && getDateYear(row.fecha) !== filters.year) return false;
-  if (filters.month && getDateMonth(row.fecha) !== filters.month) return false;
-  return true;
 }
 
 export async function getDashboardAudit(
@@ -156,18 +117,18 @@ export async function getDashboardAudit(
   );
 
   const { filters, availableYears, availableMonths, activePeriodLabel } = resolveFilters(searchParams, rows);
-  const filteredRows = rows.filter((row) => matchesFilters(row, filters));
-
-  const mapped = filteredRows.map((row) => ({
-    importId: row.import_id ?? "",
-    fecha: row.fecha,
-    sucursal: row.sucursal ?? "Sin sucursal",
-    sourceKey: row.source_key,
-    totalProductos: toNumber(row.total_productos),
-    totalPagos: toNumber(row.total_pagos),
-    totalOperaciones: toNumber(row.total_operaciones),
-    diferencia: toNumber(row.diferencia),
-  }));
+  const mapped = rows
+    .filter((row) => matchesDateRange(row.fecha, filters))
+    .map((row) => ({
+      importId: row.import_id ?? "",
+      fecha: row.fecha,
+      sucursal: row.sucursal ?? "Sin sucursal",
+      sourceKey: row.source_key,
+      totalProductos: toNumber(row.total_productos),
+      totalPagos: toNumber(row.total_pagos),
+      totalOperaciones: toNumber(row.total_operaciones),
+      diferencia: toNumber(row.diferencia),
+    }));
 
   const deltasByBranch = Array.from(
     mapped.reduce((map, row) => {

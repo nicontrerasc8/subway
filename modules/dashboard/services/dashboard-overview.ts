@@ -1,6 +1,19 @@
 import "server-only";
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import {
+  formatDateRangeLabel,
+  getDateDay,
+  getDateMonth,
+  getDateYear,
+  getMonthLabel,
+  getSearchParamValue,
+  matchesDateRange,
+  matchesMonthlyRange,
+  resolveDateRangeFilters,
+  type DashboardDateRangeFilters,
+  type DashboardDateRangeSearchParams,
+} from "@/modules/dashboard/lib/date-range-filters";
 
 const PAGE_SIZE = 1000;
 
@@ -77,15 +90,11 @@ type ReconciliationRow = {
   diferencia: number | string | null;
 };
 
-export type DashboardOverviewSearchParams = {
-  year?: SearchParamValue;
-  month?: SearchParamValue;
+export type DashboardOverviewSearchParams = DashboardDateRangeSearchParams & {
   branch?: SearchParamValue;
 };
 
-export type DashboardOverviewFilters = {
-  year: string | null;
-  month: string | null;
+export type DashboardOverviewFilters = DashboardDateRangeFilters & {
   branch: string | null;
 };
 
@@ -136,19 +145,17 @@ export type DashboardOverviewData = {
   availableMonths: string[];
   availableBranches: Array<{ id: string; label: string }>;
   activePeriodLabel: string;
+  categoryDailyKeys: string[];
   kpis: DashboardOverviewKpis;
   dailySales: DashboardOverviewPoint[];
   monthlySales: DashboardOverviewPoint[];
+  dailyCategorySales: Array<{ label: string; [key: string]: string | number }>;
   categoryMix: DashboardOverviewPoint[];
   paymentMix: DashboardOverviewPoint[];
   branchRanking: DashboardOverviewBranchPoint[];
   topProducts: DashboardOverviewProductPoint[];
   reconciliation: DashboardOverviewReconciliationPoint[];
 };
-
-function getParam(value: SearchParamValue) {
-  return Array.isArray(value) ? value[0] : value;
-}
 
 function toNumber(value: unknown) {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
@@ -157,20 +164,8 @@ function toNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function getDateYear(value: string | null) {
-  if (!value) return null;
-  return value.slice(0, 4);
-}
-
-function getDateMonth(value: string | null) {
-  if (!value) return null;
-  return String(Number(value.slice(5, 7)));
-}
-
-function getMonthLabel(month: string) {
-  return new Intl.DateTimeFormat("es-PE", { month: "long" }).format(
-    new Date(2024, Number(month) - 1, 1),
-  );
+function getShortMonthLabel(month: string) {
+  return getMonthLabel(month, "short");
 }
 
 async function fetchAllRows<T>(view: string, columns: string) {
@@ -223,14 +218,11 @@ function resolveFilters(
   searchParams: DashboardOverviewSearchParams,
   dailyRows: DailyBranchRow[],
 ) {
-  const requestedYear = getParam(searchParams.year);
-  const requestedMonth = getParam(searchParams.month);
-  const requestedBranch = getParam(searchParams.branch);
+  const requestedBranch = getSearchParamValue(searchParams.branch);
 
   const availableYears = Array.from(
     new Set(dailyRows.map((row) => getDateYear(row.fecha)).filter(Boolean) as string[]),
   ).sort((a, b) => Number(b) - Number(a));
-  const availableMonths = Array.from({ length: 12 }, (_, index) => String(index + 1));
   const availableBranches = Array.from(
     new Map(
       dailyRows
@@ -245,15 +237,15 @@ function resolveFilters(
     ).values(),
   ).sort((a, b) => a.label.localeCompare(b.label));
 
+  const dateRangeFilters = resolveDateRangeFilters(searchParams, availableYears);
+
   const filters: DashboardOverviewFilters = {
-    year: requestedYear && availableYears.includes(requestedYear) ? requestedYear : availableYears[0] ?? null,
-    month: requestedMonth && availableMonths.includes(requestedMonth) ? requestedMonth : null,
+    ...dateRangeFilters,
     branch: requestedBranch && availableBranches.some((branch) => branch.id === requestedBranch) ? requestedBranch : null,
   };
 
   const activePeriodLabel = [
-    filters.year ? `Ano ${filters.year}` : "Todos los anos",
-    filters.month ? getMonthLabel(filters.month) : "Todos los meses",
+    formatDateRangeLabel(filters),
     filters.branch
       ? availableBranches.find((branch) => branch.id === filters.branch)?.label ?? "Sucursal"
       : "Todas las sucursales",
@@ -262,7 +254,7 @@ function resolveFilters(
   return {
     filters,
     availableYears,
-    availableMonths,
+    availableMonths: [],
     availableBranches,
     activePeriodLabel,
   };
@@ -272,8 +264,7 @@ function matchesFilters(
   row: { fecha: string | null; sucursal_id: number | null },
   filters: DashboardOverviewFilters,
 ) {
-  if (filters.year && getDateYear(row.fecha) !== filters.year) return false;
-  if (filters.month && getDateMonth(row.fecha) !== filters.month) return false;
+  if (!matchesDateRange(row.fecha, filters)) return false;
   if (filters.branch && String(row.sucursal_id) !== filters.branch) return false;
   return true;
 }
@@ -321,7 +312,7 @@ export async function getDashboardOverview(
   const filteredPayments = paymentRows.filter((row) => matchesFilters(row, filters));
   const filteredReconciliation = reconciliationRows.filter((row) => matchesFilters(row, filters));
   const filteredMonthly = monthlyRows.filter((row) => {
-    if (filters.year && String(row.anio) !== filters.year) return false;
+    if (!matchesMonthlyRange(row, filters)) return false;
     if (filters.branch && String(row.sucursal_id) !== filters.branch) return false;
     return true;
   });
@@ -345,16 +336,47 @@ export async function getDashboardOverview(
 
   const monthlySales = Array.from(
     filteredMonthly.reduce((map, row) => {
-      const key = row.mes_num ? String(row.mes_num) : "0";
-      map.set(key, (map.get(key) ?? 0) + toNumber(row.ventas));
+      const year = row.anio ? String(row.anio) : "Sin año";
+      const month = row.mes_num ? String(row.mes_num) : "0";
+      const key = `${year}-${month.padStart(2, "0")}`;
+      const current = map.get(key) ?? {
+        label: row.mes_num ? `${getShortMonthLabel(month)} ${year}` : "Sin mes",
+        value: 0,
+      };
+      current.value += toNumber(row.ventas);
+      map.set(key, current);
       return map;
-    }, new Map<string, number>()),
+    }, new Map<string, DashboardOverviewPoint>()),
   )
-    .sort((a, b) => Number(a[0]) - Number(b[0]))
-    .map(([month, value]) => ({
-      label: getMonthLabel(month),
-      value,
-    }));
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([, value]) => value);
+
+  const categoryTotals = new Map<string, number>();
+  const dailyCategoryMap = new Map<string, { label: string; [key: string]: string | number }>();
+
+  for (const row of filteredCategories) {
+    const category = row.categoria ?? "Sin categoria";
+    const value = toNumber(row.ventas);
+    const year = getDateYear(row.fecha);
+    const month = getDateMonth(row.fecha);
+    const day = getDateDay(row.fecha);
+    const key = row.fecha ?? "Sin fecha";
+
+    categoryTotals.set(category, (categoryTotals.get(category) ?? 0) + value);
+
+    const label = year && month && day ? `${day} ${getShortMonthLabel(month)} ${year}` : "Sin fecha";
+    const current = dailyCategoryMap.get(key) ?? { label };
+    current[category] = Number(current[category] ?? 0) + value;
+    dailyCategoryMap.set(key, current);
+  }
+
+  const categoryDailyKeys = [...categoryTotals.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([category]) => category);
+
+  const dailyCategorySales = [...dailyCategoryMap.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([, value]) => value);
 
   const categoryMix = Array.from(
     filteredCategories.reduce((map, row) => {
@@ -440,6 +462,7 @@ export async function getDashboardOverview(
     availableMonths,
     availableBranches,
     activePeriodLabel,
+    categoryDailyKeys,
     kpis: {
       totalSales,
       totalUnits,
@@ -450,6 +473,7 @@ export async function getDashboardOverview(
     },
     dailySales,
     monthlySales,
+    dailyCategorySales,
     categoryMix,
     paymentMix,
     branchRanking,

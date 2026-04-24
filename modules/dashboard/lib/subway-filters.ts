@@ -150,7 +150,7 @@ export function resolveSubwayFilters(
   };
 
   const activeFilterParts = [
-    filters.year ? `Ano ${filters.year}` : "Todos los anos",
+    filters.year ? `año ${filters.year}` : "Todos los años",
     filters.month ? monthLabels[Number(filters.month) - 1] : "Todos los meses",
     filters.weekday ? fullDayLabels[Number(filters.weekday)] : "Todos los dias",
   ];

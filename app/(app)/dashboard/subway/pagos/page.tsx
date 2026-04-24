@@ -1,66 +1,26 @@
-import Link from "next/link";
-
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { cn, formatCurrency, formatNumber } from "@/lib/utils";
+import { DashboardRangeFilterForm } from "@/app/(app)/dashboard/_components/dashboard-range-filter-form";
 import {
   DashboardBranchesMultiBarChart,
   DashboardBranchesMultiLineChart,
   DashboardMixChart,
 } from "@/app/(app)/dashboard/_components/dashboard-overview-charts";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatCurrency, formatNumber } from "@/lib/utils";
 import { getDashboardPayments, type DashboardPaymentsSearchParams } from "@/modules/dashboard/services/dashboard-payments";
 
 type PageProps = {
   searchParams: Promise<DashboardPaymentsSearchParams>;
 };
 
-function buildHref(
-  current: { year: string | null; month: string | null },
-  patch: Partial<{ year: string | null; month: string | null }>,
-) {
-  const params = new URLSearchParams();
-  const next = { ...current, ...patch };
-
-  if (next.year) params.set("year", next.year);
-  if (next.month) params.set("month", next.month);
-
-  const query = params.toString();
-  return query ? `/dashboard/subway/pagos?${query}` : "/dashboard/subway/pagos";
-}
-
-function FilterChip({
-  href,
-  active,
-  label,
-}: {
-  href: string;
-  active: boolean;
-  label: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className={cn(
-        "rounded-full border px-3 py-1.5 text-sm transition",
-        active
-          ? "border-foreground bg-foreground text-background"
-          : "border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground",
-      )}
-    >
-      {label}
-    </Link>
-  );
-}
-
 export default async function SubwayPaymentsPage({ searchParams }: PageProps) {
-  const resolvedSearchParams = await searchParams;
-  const dashboard = await getDashboardPayments(resolvedSearchParams);
+  const dashboard = await getDashboardPayments(await searchParams);
 
   return (
     <div className="space-y-8">
       <section className="rounded-[2rem] border border-border bg-[radial-gradient(circle_at_top_left,rgba(255,194,10,0.22),transparent_28%),radial-gradient(circle_at_top_right,rgba(239,68,68,0.16),transparent_30%),linear-gradient(135deg,#ffffff_0%,#f8fafc_100%)] p-8 shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-muted-foreground">Pagos y ticket</p>
         <h1 className="mt-3 max-w-3xl text-4xl font-semibold tracking-tight text-foreground">
-          Medios de pago, ticket promedio y traccion por sucursal
+          Medios de pago, ticket promedio y tracción por sucursal
         </h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
           Esta vista trabaja sobre pagos consolidados y sirve para comparar ticket promedio, importe total y mix de medios de pago.
@@ -71,43 +31,16 @@ export default async function SubwayPaymentsPage({ searchParams }: PageProps) {
       </section>
 
       <section className="grid gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-1">
-          <CardHeader>
-            <CardTitle>Filtros</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Ano</p>
-              <div className="flex flex-wrap gap-2">
-                {dashboard.availableYears.map((year) => (
-                  <FilterChip
-                    key={year}
-                    href={buildHref(dashboard.filters, { year, month: null })}
-                    active={dashboard.filters.year === year}
-                    label={year}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Mes</p>
-              <div className="flex flex-wrap gap-2">
-                <FilterChip
-                  href={buildHref(dashboard.filters, { month: null })}
-                  active={dashboard.filters.month === null}
-                  label="Todos"
-                />
-                {dashboard.availableMonths.map((month) => (
-                  <FilterChip
-                    key={month}
-                    href={buildHref(dashboard.filters, { month })}
-                    active={dashboard.filters.month === month}
-                    label={month}
-                  />
-                ))}
-              </div>
-            </div>
+        <Card>
+          <CardHeader><CardTitle>Filtros</CardTitle></CardHeader>
+          <CardContent>
+            <DashboardRangeFilterForm
+              action="/dashboard/subway/pagos"
+              filters={dashboard.filters}
+              availableYears={dashboard.availableYears}
+              branch={dashboard.filters.branch}
+              branches={dashboard.availableBranches}
+            />
           </CardContent>
         </Card>
 
@@ -130,7 +63,7 @@ export default async function SubwayPaymentsPage({ searchParams }: PageProps) {
             <CardHeader><CardTitle>Ticket promedio</CardTitle></CardHeader>
             <CardContent>
               <p className="text-3xl font-semibold">{formatCurrency(dashboard.kpis.averageTicket)}</p>
-              <p className="mt-2 text-sm text-muted-foreground">Importe medio por operacion.</p>
+              <p className="mt-2 text-sm text-muted-foreground">Importe medio por operación.</p>
             </CardContent>
           </Card>
           <Card>
@@ -153,7 +86,8 @@ export default async function SubwayPaymentsPage({ searchParams }: PageProps) {
       <section className="grid gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Ticket por sucursal</CardTitle>
+            <CardTitle>Ticket por año</CardTitle>
+            <p className="text-sm text-muted-foreground">Compara el ticket promedio del mismo día y mes entre años para la sucursal filtrada.</p>
           </CardHeader>
           <CardContent>
             <DashboardBranchesMultiLineChart data={dashboard.ticketTrend} keys={dashboard.branchKeys} />
@@ -161,7 +95,8 @@ export default async function SubwayPaymentsPage({ searchParams }: PageProps) {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Importe diario por sucursal</CardTitle>
+            <CardTitle>Importe diario por año</CardTitle>
+            <p className="text-sm text-muted-foreground">Cada color representa el importe cobrado por año según la sucursal filtrada.</p>
           </CardHeader>
           <CardContent>
             <DashboardBranchesMultiBarChart data={dashboard.amountTrend} keys={dashboard.branchKeys} />
@@ -171,9 +106,7 @@ export default async function SubwayPaymentsPage({ searchParams }: PageProps) {
 
       <section className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
         <Card>
-          <CardHeader>
-            <CardTitle>Mix de medios de pago</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle>Mix de medios de pago</CardTitle></CardHeader>
           <CardContent className="grid gap-3 lg:grid-cols-[220px_1fr] lg:items-center">
             <DashboardMixChart data={dashboard.paymentMix} />
             <div className="space-y-2">
@@ -188,9 +121,7 @@ export default async function SubwayPaymentsPage({ searchParams }: PageProps) {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Ranking de sucursales por pagos</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle>Ranking de sucursales por pagos</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {dashboard.paymentsByBranch.length ? (
               dashboard.paymentsByBranch.map((branch) => (

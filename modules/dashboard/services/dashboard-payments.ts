@@ -1,10 +1,19 @@
 import "server-only";
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import {
+  formatDateRangeLabel,
+  getDateMonth,
+  getDateYear,
+  getMonthLabel,
+  getSearchParamValue,
+  matchesDateRange,
+  resolveDateRangeFilters,
+  type DashboardDateRangeFilters,
+  type DashboardDateRangeSearchParams,
+} from "@/modules/dashboard/lib/date-range-filters";
 
 const PAGE_SIZE = 1000;
-
-type SearchParamValue = string | string[] | undefined;
 
 type TicketDailyBranchRow = {
   fecha: string | null;
@@ -33,14 +42,12 @@ type PaymentDetailRow = {
   operaciones: number | string | null;
 };
 
-export type DashboardPaymentsFilters = {
-  year: string | null;
-  month: string | null;
+export type DashboardPaymentsFilters = DashboardDateRangeFilters & {
+  branch: string | null;
 };
 
-export type DashboardPaymentsSearchParams = {
-  year?: SearchParamValue;
-  month?: SearchParamValue;
+export type DashboardPaymentsSearchParams = DashboardDateRangeSearchParams & {
+  branch?: string | string[];
 };
 
 export type DashboardPaymentsKpis = {
@@ -73,6 +80,7 @@ export type DashboardPaymentsData = {
   filters: DashboardPaymentsFilters;
   availableYears: string[];
   availableMonths: string[];
+  availableBranches: Array<{ id: string; label: string }>;
   activePeriodLabel: string;
   branchKeys: string[];
   kpis: DashboardPaymentsKpis;
@@ -82,31 +90,11 @@ export type DashboardPaymentsData = {
   amountTrend: DashboardPaymentsChartPoint[];
 };
 
-function getParam(value: SearchParamValue) {
-  return Array.isArray(value) ? value[0] : value;
-}
-
 function toNumber(value: unknown) {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   if (typeof value !== "string") return 0;
   const parsed = Number(value.replace(",", ".").trim());
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function getDateYear(value: string | null) {
-  if (!value) return null;
-  return value.slice(0, 4);
-}
-
-function getDateMonth(value: string | null) {
-  if (!value) return null;
-  return String(Number(value.slice(5, 7)));
-}
-
-function getMonthLabel(month: string) {
-  return new Intl.DateTimeFormat("es-PE", { month: "short" }).format(
-    new Date(2024, Number(month) - 1, 1),
-  );
 }
 
 async function fetchAllRows<T>(view: string, columns: string) {
@@ -159,35 +147,61 @@ function resolveFilters(
   searchParams: DashboardPaymentsSearchParams,
   rows: TicketDailyBranchRow[],
 ) {
-  const requestedYear = getParam(searchParams.year);
-  const requestedMonth = getParam(searchParams.month);
-
   const availableYears = Array.from(
     new Set(rows.map((row) => getDateYear(row.fecha)).filter(Boolean) as string[]),
   ).sort((a, b) => Number(b) - Number(a));
-  const availableMonths = Array.from({ length: 12 }, (_, index) => String(index + 1));
-
+  const availableBranches = Array.from(
+    new Map(
+      rows
+        .filter((row) => row.sucursal_id !== null)
+        .map((row) => [
+          String(row.sucursal_id),
+          { id: String(row.sucursal_id), label: row.sucursal ?? `Sucursal ${row.sucursal_id}` },
+        ]),
+    ).values(),
+  ).sort((a, b) => a.label.localeCompare(b.label));
+  const requestedBranch = getSearchParamValue(searchParams.branch);
+  const dateRangeFilters = resolveDateRangeFilters(searchParams, availableYears);
   const filters: DashboardPaymentsFilters = {
-    year: requestedYear && availableYears.includes(requestedYear) ? requestedYear : availableYears[0] ?? null,
-    month: requestedMonth && availableMonths.includes(requestedMonth) ? requestedMonth : null,
+    ...dateRangeFilters,
+    branch:
+      requestedBranch && availableBranches.some((branch) => branch.id === requestedBranch)
+        ? requestedBranch
+        : null,
   };
 
   return {
     filters,
     availableYears,
-    availableMonths,
+    availableMonths: [],
+    availableBranches,
     activePeriodLabel: [
-      filters.year ? `Ano ${filters.year}` : "Todos los anos",
-      filters.month ? getMonthLabel(filters.month) : "Todos los meses",
-      "Pagos y ticket por sucursal",
+      formatDateRangeLabel(filters),
+      filters.branch
+        ? availableBranches.find((branch) => branch.id === filters.branch)?.label ?? "Sucursal"
+        : "Todas las sucursales",
+      "Pagos y ticket promedio por sucursal",
     ].join(" · "),
   };
 }
 
-function matchesFilters(row: { fecha: string | null }, filters: DashboardPaymentsFilters) {
-  if (filters.year && getDateYear(row.fecha) !== filters.year) return false;
-  if (filters.month && getDateMonth(row.fecha) !== filters.month) return false;
+function matchesFilters(row: { fecha: string | null; sucursal_id: number | null }, filters: DashboardPaymentsFilters) {
+  if (!matchesDateRange(row.fecha, filters)) return false;
+  if (filters.branch && String(row.sucursal_id) !== filters.branch) return false;
   return true;
+}
+
+function getDayComparisonKey(fecha: string | null) {
+  if (!fecha) return null;
+
+  const month = getDateMonth(fecha);
+  const day = Number(fecha.slice(8, 10));
+  if (!month || !day) return null;
+
+  return {
+    key: `${month.padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+    label: `${day} ${getMonthLabel(month, "short")}`,
+  };
 }
 
 export async function getDashboardPayments(
@@ -201,18 +215,14 @@ export async function getDashboardPayments(
     fetchPaymentRows(),
   ]);
 
-  const { filters, availableYears, availableMonths, activePeriodLabel } = resolveFilters(searchParams, ticketRows);
+  const { filters, availableYears, availableMonths, availableBranches, activePeriodLabel } = resolveFilters(searchParams, ticketRows);
 
   const filteredTicketRows = ticketRows.filter((row) => matchesFilters(row, filters));
   const filteredPaymentRows = paymentRows.filter((row) => matchesFilters(row, filters));
 
-  const branchKeys = Array.from(
-    new Map(
-      filteredTicketRows
-        .filter((row) => row.sucursal_id !== null)
-        .map((row) => [String(row.sucursal_id), row.sucursal ?? `Sucursal ${row.sucursal_id}`]),
-    ).values(),
-  ).sort((a, b) => a.localeCompare(b));
+  const comparisonYears = Array.from(
+    new Set(filteredTicketRows.map((row) => getDateYear(row.fecha)).filter(Boolean) as string[]),
+  ).sort((a, b) => Number(a) - Number(b));
 
   const paymentsByBranch = Array.from(
     filteredTicketRows.reduce((map, row) => {
@@ -247,10 +257,20 @@ export async function getDashboardPayments(
 
   const ticketTrend = Array.from(
     filteredTicketRows.reduce((map, row) => {
-      const key = row.fecha ?? "";
-      const entry = map.get(key) ?? { label: key };
-      entry[row.sucursal ?? "Sin sucursal"] = toNumber(row.ticket_promedio);
-      map.set(key, entry);
+      const year = getDateYear(row.fecha);
+      const dayKey = getDayComparisonKey(row.fecha);
+      if (!year || !dayKey) return map;
+
+      const current = map.get(dayKey.key) ?? { label: dayKey.label };
+      const currentAmountKey = `${year}__amount`;
+      const currentOperationsKey = `${year}__operations`;
+      current[currentAmountKey] = Number(current[currentAmountKey] ?? 0) + toNumber(row.importe_total);
+      current[currentOperationsKey] = Number(current[currentOperationsKey] ?? 0) + toNumber(row.operaciones_totales);
+      current[year] =
+        Number(current[currentOperationsKey] ?? 0) > 0
+          ? Number(current[currentAmountKey] ?? 0) / Number(current[currentOperationsKey])
+          : 0;
+      map.set(dayKey.key, current);
       return map;
     }, new Map<string, DashboardPaymentsChartPoint>()),
   )
@@ -259,10 +279,13 @@ export async function getDashboardPayments(
 
   const amountTrend = Array.from(
     filteredTicketRows.reduce((map, row) => {
-      const key = row.fecha ?? "";
-      const entry = map.get(key) ?? { label: key };
-      entry[row.sucursal ?? "Sin sucursal"] = toNumber(row.importe_total);
-      map.set(key, entry);
+      const year = getDateYear(row.fecha);
+      const dayKey = getDayComparisonKey(row.fecha);
+      if (!year || !dayKey) return map;
+
+      const entry = map.get(dayKey.key) ?? { label: dayKey.label };
+      entry[year] = Number(entry[year] ?? 0) + toNumber(row.importe_total);
+      map.set(dayKey.key, entry);
       return map;
     }, new Map<string, DashboardPaymentsChartPoint>()),
   )
@@ -276,8 +299,9 @@ export async function getDashboardPayments(
     filters,
     availableYears,
     availableMonths,
+    availableBranches,
     activePeriodLabel,
-    branchKeys,
+    branchKeys: comparisonYears,
     kpis: {
       totalAmount,
       totalOperations,

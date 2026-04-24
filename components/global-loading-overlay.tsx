@@ -163,29 +163,17 @@ export function GlobalLoadingOverlay() {
       showOverlay("route");
     }
 
-    function handleChange(event: Event) {
-      const target = event.target as HTMLElement | null;
-
-      if (target?.closest("[data-loading-overlay-ignore='true']")) return;
-
-      if (target instanceof HTMLSelectElement) {
-        showOverlay("filter");
-      }
-    }
-
     function handlePopState() {
       showOverlay("route");
     }
 
     document.addEventListener("click", handleClick, true);
     document.addEventListener("submit", handleSubmit, true);
-    document.addEventListener("change", handleChange, true);
     window.addEventListener("popstate", handlePopState);
 
     return () => {
       document.removeEventListener("click", handleClick, true);
       document.removeEventListener("submit", handleSubmit, true);
-      document.removeEventListener("change", handleChange, true);
       window.removeEventListener("popstate", handlePopState);
       clearAllTimers();
     };

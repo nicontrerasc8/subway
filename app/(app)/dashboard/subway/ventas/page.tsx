@@ -1,55 +1,15 @@
-import Link from "next/link";
-
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { cn, formatCurrency, formatNumber } from "@/lib/utils";
+import { DashboardRangeFilterForm } from "@/app/(app)/dashboard/_components/dashboard-range-filter-form";
 import { DashboardBranchesMultiBarChart, DashboardBranchesMultiLineChart } from "@/app/(app)/dashboard/_components/dashboard-overview-charts";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatCurrency, formatNumber } from "@/lib/utils";
 import { getDashboardBranches, type DashboardBranchesSearchParams } from "@/modules/dashboard/services/dashboard-branches";
 
 type PageProps = {
   searchParams: Promise<DashboardBranchesSearchParams>;
 };
 
-function buildHref(
-  current: { year: string | null; month: string | null },
-  patch: Partial<{ year: string | null; month: string | null }>,
-) {
-  const params = new URLSearchParams();
-  const next = { ...current, ...patch };
-
-  if (next.year) params.set("year", next.year);
-  if (next.month) params.set("month", next.month);
-
-  const query = params.toString();
-  return query ? `/dashboard/subway/ventas?${query}` : "/dashboard/subway/ventas";
-}
-
-function FilterChip({
-  href,
-  active,
-  label,
-}: {
-  href: string;
-  active: boolean;
-  label: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className={cn(
-        "rounded-full border px-3 py-1.5 text-sm transition",
-        active
-          ? "border-foreground bg-foreground text-background"
-          : "border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground",
-      )}
-    >
-      {label}
-    </Link>
-  );
-}
-
 export default async function SubwaySalesPage({ searchParams }: PageProps) {
-  const resolvedSearchParams = await searchParams;
-  const dashboard = await getDashboardBranches(resolvedSearchParams);
+  const dashboard = await getDashboardBranches(await searchParams);
 
   return (
     <div className="space-y-8">
@@ -67,43 +27,18 @@ export default async function SubwaySalesPage({ searchParams }: PageProps) {
       </section>
 
       <section className="grid gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-1">
+        <Card>
           <CardHeader>
             <CardTitle>Filtros</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Ano</p>
-              <div className="flex flex-wrap gap-2">
-                {dashboard.availableYears.map((year) => (
-                  <FilterChip
-                    key={year}
-                    href={buildHref(dashboard.filters, { year, month: null })}
-                    active={dashboard.filters.year === year}
-                    label={year}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Mes</p>
-              <div className="flex flex-wrap gap-2">
-                <FilterChip
-                  href={buildHref(dashboard.filters, { month: null })}
-                  active={dashboard.filters.month === null}
-                  label="Todos"
-                />
-                {dashboard.availableMonths.map((month) => (
-                  <FilterChip
-                    key={month}
-                    href={buildHref(dashboard.filters, { month })}
-                    active={dashboard.filters.month === month}
-                    label={month}
-                  />
-                ))}
-              </div>
-            </div>
+          <CardContent>
+            <DashboardRangeFilterForm
+              action="/dashboard/subway/ventas"
+              filters={dashboard.filters}
+              availableYears={dashboard.availableYears}
+              branch={dashboard.filters.branch}
+              branches={dashboard.availableBranches}
+            />
           </CardContent>
         </Card>
 
@@ -126,7 +61,7 @@ export default async function SubwaySalesPage({ searchParams }: PageProps) {
             <CardHeader><CardTitle>Ticket promedio</CardTitle></CardHeader>
             <CardContent>
               <p className="text-3xl font-semibold">{formatCurrency(dashboard.kpis.averageTicket)}</p>
-              <p className="mt-2 text-sm text-muted-foreground">Promedio global por operacion.</p>
+              <p className="mt-2 text-sm text-muted-foreground">Promedio global por operación.</p>
             </CardContent>
           </Card>
           <Card>
@@ -144,7 +79,7 @@ export default async function SubwaySalesPage({ searchParams }: PageProps) {
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle>Productos por dia</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Productos por día</CardTitle></CardHeader>
             <CardContent>
               <p className="text-3xl font-semibold">{formatNumber(dashboard.kpis.averageProductsPerDay)}</p>
               <p className="mt-2 text-sm text-muted-foreground">Promedio de variedad diaria visible.</p>
@@ -156,7 +91,8 @@ export default async function SubwaySalesPage({ searchParams }: PageProps) {
       <section className="grid gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Tendencia diaria por sucursal</CardTitle>
+            <CardTitle>Tendencia diaria por año</CardTitle>
+            <p className="text-sm text-muted-foreground">Compara el mismo día y mes entre los años del rango.</p>
           </CardHeader>
           <CardContent>
             <DashboardBranchesMultiLineChart data={dashboard.dailyTrend} keys={dashboard.branchKeys} />
@@ -164,7 +100,8 @@ export default async function SubwaySalesPage({ searchParams }: PageProps) {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Acumulado mensual por sucursal</CardTitle>
+            <CardTitle>Acumulado mensual por año</CardTitle>
+            <p className="text-sm text-muted-foreground">Cada color representa un año dentro del rango filtrado.</p>
           </CardHeader>
           <CardContent>
             <DashboardBranchesMultiBarChart data={dashboard.monthlyTrend} keys={dashboard.branchKeys} />
@@ -197,7 +134,7 @@ export default async function SubwaySalesPage({ searchParams }: PageProps) {
                       <p className="font-semibold">{formatCurrency(branch.averageTicket)}</p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">SKUs por dia</p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">SKUs por día</p>
                       <p className="font-semibold">{formatNumber(branch.averageProducts)}</p>
                     </div>
                   </div>
