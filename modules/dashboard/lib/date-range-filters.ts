@@ -74,11 +74,12 @@ export function resolveDateRangeFilters(
   const sortedLegacyYears = sortYearsAscending(legacyYears);
   const sortedLegacyMonths = legacyMonths.sort((a, b) => Number(a) - Number(b));
   const latestYear = availableYears[0] ?? null;
+  const earliestYear = sortYearsAscending(availableYears)[0] ?? latestYear;
 
   let yearFrom =
     getValidYear(getSearchParamValue(searchParams.yearFrom), availableYears) ??
     sortedLegacyYears[0] ??
-    latestYear;
+    earliestYear;
   let yearTo =
     getValidYear(getSearchParamValue(searchParams.yearTo), availableYears) ??
     sortedLegacyYears.at(-1) ??

@@ -18,6 +18,16 @@ import type { DashboardMixProductComparisonPoint } from "@/modules/dashboard/ser
 import { formatCurrency, formatNumber } from "@/lib/utils";
 
 const COLORS = ["#008938", "#ffc20a", "#2563eb", "#ef4444", "#14b8a6", "#f97316"];
+const PLATFORM_COLORS: Record<string, string> = {
+  Peya: "#e60023",
+  Rappi: "#ff441f",
+  Turbo: "#7c3aed",
+  Didi: "#ff7a00",
+};
+
+function getPlatformColor(label: unknown) {
+  return typeof label === "string" ? PLATFORM_COLORS[label] : undefined;
+}
 
 function CurrencyTooltip({
   active,
@@ -164,7 +174,20 @@ export function DashboardBranchesMultiBarChart({
         <Tooltip content={<ValueTooltip valueFormatter={valueFormatter} />} />
         <Legend align="right" iconType="circle" verticalAlign="top" height={28} wrapperStyle={{ fontSize: 12 }} />
         {keys.map((key, index) => (
-          <Bar key={key} dataKey={key} fill={COLORS[index % COLORS.length]} radius={[6, 6, 0, 0]} />
+          <Bar
+            key={key}
+            dataKey={key}
+            fill={COLORS[index % COLORS.length]}
+            fillOpacity={keys.length > 1 && index === 0 ? 0.62 : 1}
+            radius={[6, 6, 0, 0]}
+          >
+            {data.map((entry) => (
+              <Cell
+                key={`${key}-${entry.label}`}
+                fill={getPlatformColor(entry.label) ?? COLORS[index % COLORS.length]}
+              />
+            ))}
+          </Bar>
         ))}
       </BarChart>
     </ResponsiveContainer>
