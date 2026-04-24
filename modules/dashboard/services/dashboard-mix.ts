@@ -77,6 +77,12 @@ export type DashboardMixProductPoint = {
   unidades: number;
 };
 
+export type DashboardMixProductComparisonPoint = DashboardMixProductPoint & {
+  label: string;
+  byYear: Record<string, number>;
+  byBranch: Record<string, number>;
+};
+
 export type DashboardMixBranchPoint = {
   branch: string;
   sales: number;
@@ -94,6 +100,9 @@ export type DashboardMixData = {
   monthlyCategoryTrend: Array<{ label: string; [key: string]: string | number }>;
   categoryKeys: string[];
   topProducts: DashboardMixProductPoint[];
+  productComparison: DashboardMixProductComparisonPoint[];
+  productYearKeys: string[];
+  productBranchKeys: string[];
   globalProducts: DashboardMixProductPoint[];
   topBranches: DashboardMixBranchPoint[];
 };
@@ -225,6 +234,55 @@ export async function getDashboardMix(
     .sort((a, b) => b.ventas - a.ventas)
     .slice(0, 10);
 
+  const topProductRefs = new Set(topProducts.map((product) => product.referencia));
+  const productYearKeys = Array.from(
+    new Set(filteredProducts.map((row) => getDateYear(row.fecha)).filter(Boolean) as string[]),
+  ).sort((a, b) => Number(a) - Number(b));
+  const productBranchKeys = Array.from(
+    filteredProducts.reduce((map, row) => {
+      if (row.sucursal_id === null) return map;
+      const branch = row.sucursal ?? `Sucursal ${row.sucursal_id}`;
+      map.set(branch, (map.get(branch) ?? 0) + toNumber(row.ventas));
+      return map;
+    }, new Map<string, number>()),
+  )
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([branch]) => branch);
+
+  const productComparison = Array.from(
+    filteredProducts.reduce((map, row) => {
+      const reference = row.referencia ?? row.producto ?? "sin-producto";
+      if (!topProductRefs.has(row.referencia ?? "-")) return map;
+
+      const current = map.get(reference) ?? {
+        referencia: row.referencia ?? "-",
+        producto: row.producto ?? "Sin producto",
+        categoria: row.categoria ?? "Sin categoria",
+        label: row.producto ?? row.referencia ?? "Sin producto",
+        ventas: 0,
+        unidades: 0,
+        byYear: {},
+        byBranch: {},
+      };
+      const sales = toNumber(row.ventas);
+      const units = toNumber(row.unidades);
+      const year = getDateYear(row.fecha);
+      const branch = row.sucursal ?? (row.sucursal_id === null ? null : `Sucursal ${row.sucursal_id}`);
+
+      current.ventas += sales;
+      current.unidades += units;
+      if (year) current.byYear[year] = (current.byYear[year] ?? 0) + sales;
+      if (branch && productBranchKeys.includes(branch)) {
+        current.byBranch[branch] = (current.byBranch[branch] ?? 0) + sales;
+      }
+      map.set(reference, current);
+      return map;
+    }, new Map<string, DashboardMixProductComparisonPoint>()),
+  )
+    .map(([, value]) => value)
+    .sort((a, b) => b.ventas - a.ventas);
+
   const globalProducts = productGlobalRows
     .map((row) => ({
       referencia: row.referencia ?? "-",
@@ -283,6 +341,9 @@ export async function getDashboardMix(
     monthlyCategoryTrend,
     categoryKeys,
     topProducts,
+    productComparison,
+    productYearKeys,
+    productBranchKeys,
     globalProducts,
     topBranches,
   };

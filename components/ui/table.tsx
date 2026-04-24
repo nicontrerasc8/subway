@@ -17,7 +17,7 @@ export function TableHead({
   className,
   ...props
 }: React.HTMLAttributes<HTMLTableSectionElement>) {
-  return <thead className={cn("bg-muted/70 text-left", className)} {...props} />;
+  return <thead className={cn("bg-muted text-left", className)} {...props} />;
 }
 
 export function TableBody({
