@@ -12,19 +12,19 @@ export default async function SubwayCrossPage({ searchParams }: PageProps) {
   const dashboard = await getDashboardMix(await searchParams);
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-[1.5rem] border border-border bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.16),transparent_28%),radial-gradient(circle_at_top_right,rgba(0,137,56,0.12),transparent_30%),linear-gradient(135deg,#ffffff_0%,#f8fafc_100%)] p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-muted-foreground">Mix comercial</p>
-        <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
+    <div className="space-y-5">
+      <section className="rounded-3xl border border-border bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.16),transparent_28%),radial-gradient(circle_at_top_right,rgba(0,137,56,0.12),transparent_30%),linear-gradient(135deg,#ffffff_0%,#f8fafc_100%)] p-6 shadow-sm">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">Mix comercial</p>
+        <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="max-w-4xl text-3xl font-semibold tracking-tight text-foreground">
+            <h1 className="max-w-4xl text-2xl font-semibold tracking-tight text-foreground lg:text-3xl">
               Categorías, productos y composición del negocio
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
               Peso de categorías, productos líderes y sucursales con mejor mix.
             </p>
           </div>
-          <div className="inline-flex rounded-full border border-border bg-background/80 px-4 py-2 text-sm text-muted-foreground">
+          <div className="inline-flex rounded-full border border-border bg-background/80 px-3.5 py-1.5 text-sm text-muted-foreground">
             {dashboard.activePeriodLabel}
           </div>
         </div>

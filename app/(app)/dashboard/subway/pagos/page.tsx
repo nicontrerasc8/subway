@@ -1,7 +1,6 @@
 import { DashboardRangeFilterForm } from "@/app/(app)/dashboard/_components/dashboard-range-filter-form";
 import {
-  DashboardBranchesMultiBarChart,
-  DashboardBranchesMultiLineChart,
+  DashboardBranchesMetricView,
   DashboardMixChart,
 } from "@/app/(app)/dashboard/_components/dashboard-overview-charts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,67 +15,68 @@ export default async function SubwayPaymentsPage({ searchParams }: PageProps) {
   const dashboard = await getDashboardPayments(await searchParams);
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-[2rem] border border-border bg-[radial-gradient(circle_at_top_left,rgba(255,194,10,0.22),transparent_28%),radial-gradient(circle_at_top_right,rgba(239,68,68,0.16),transparent_30%),linear-gradient(135deg,#ffffff_0%,#f8fafc_100%)] p-8 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-muted-foreground">Pagos y ticket</p>
-        <h1 className="mt-3 max-w-3xl text-4xl font-semibold tracking-tight text-foreground">
+    <div className="space-y-5">
+      <section className="rounded-3xl border border-border bg-[radial-gradient(circle_at_top_left,rgba(255,194,10,0.22),transparent_28%),radial-gradient(circle_at_top_right,rgba(239,68,68,0.16),transparent_30%),linear-gradient(135deg,#ffffff_0%,#f8fafc_100%)] p-6 shadow-sm">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">Pagos y ticket</p>
+        <h1 className="mt-2 max-w-3xl text-2xl font-semibold tracking-tight text-foreground lg:text-3xl">
           Medios de pago, ticket promedio y tracción por sucursal
         </h1>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
           Esta vista trabaja sobre pagos consolidados y sirve para comparar ticket promedio, importe total y mix de medios de pago.
         </p>
-        <div className="mt-5 inline-flex rounded-full border border-border bg-background/80 px-4 py-2 text-sm text-muted-foreground">
+        <div className="mt-4 inline-flex rounded-full border border-border bg-background/80 px-3.5 py-1.5 text-sm text-muted-foreground">
           {dashboard.activePeriodLabel}
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-3">
-        <Card>
-          <CardHeader><CardTitle>Filtros</CardTitle></CardHeader>
-          <CardContent>
-            <DashboardRangeFilterForm
-              action="/dashboard/subway/pagos"
-              filters={dashboard.filters}
-              availableYears={dashboard.availableYears}
-              branch={dashboard.filters.branch}
-              branches={dashboard.availableBranches}
-            />
-          </CardContent>
-        </Card>
+      <Card>
+        <CardHeader className="pb-4"><CardTitle>Filtros</CardTitle></CardHeader>
+        <CardContent className="pt-0">
+          <DashboardRangeFilterForm
+            action="/dashboard/subway/pagos"
+            filters={dashboard.filters}
+            availableYears={dashboard.availableYears}
+            branch={dashboard.filters.branch}
+            branches={dashboard.availableBranches}
+            layout="inline"
+          />
+        </CardContent>
+      </Card>
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:col-span-2 xl:grid-cols-3">
+      <section>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <Card>
             <CardHeader><CardTitle>Importe total</CardTitle></CardHeader>
             <CardContent>
-              <p className="text-3xl font-semibold">{formatCurrency(dashboard.kpis.totalAmount)}</p>
+              <p className="text-2xl font-semibold">{formatCurrency(dashboard.kpis.totalAmount)}</p>
               <p className="mt-2 text-sm text-muted-foreground">Total cobrado en el periodo.</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle>Operaciones</CardTitle></CardHeader>
             <CardContent>
-              <p className="text-3xl font-semibold">{formatNumber(dashboard.kpis.totalOperations)}</p>
+              <p className="text-2xl font-semibold">{formatNumber(dashboard.kpis.totalOperations)}</p>
               <p className="mt-2 text-sm text-muted-foreground">Cantidad de operaciones registradas.</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle>Ticket promedio</CardTitle></CardHeader>
             <CardContent>
-              <p className="text-3xl font-semibold">{formatCurrency(dashboard.kpis.averageTicket)}</p>
+              <p className="text-2xl font-semibold">{formatCurrency(dashboard.kpis.averageTicket)}</p>
               <p className="mt-2 text-sm text-muted-foreground">Importe medio por operación.</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle>Sucursales activas</CardTitle></CardHeader>
             <CardContent>
-              <p className="text-3xl font-semibold">{formatNumber(dashboard.kpis.activeBranches)}</p>
+              <p className="text-2xl font-semibold">{formatNumber(dashboard.kpis.activeBranches)}</p>
               <p className="mt-2 text-sm text-muted-foreground">Sedes con movimiento en pagos.</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle>Medios visibles</CardTitle></CardHeader>
             <CardContent>
-              <p className="text-3xl font-semibold">{formatNumber(dashboard.kpis.activeMethods)}</p>
+              <p className="text-2xl font-semibold">{formatNumber(dashboard.kpis.activeMethods)}</p>
               <p className="mt-2 text-sm text-muted-foreground">Formas de pago presentes en el corte.</p>
             </CardContent>
           </Card>
@@ -90,7 +90,11 @@ export default async function SubwayPaymentsPage({ searchParams }: PageProps) {
             <p className="text-sm text-muted-foreground">Compara el ticket promedio del mismo día y mes entre años para la sucursal filtrada.</p>
           </CardHeader>
           <CardContent>
-            <DashboardBranchesMultiLineChart data={dashboard.ticketTrend} keys={dashboard.branchKeys} />
+            <DashboardBranchesMetricView
+              data={dashboard.ticketTrend}
+              keys={dashboard.branchKeys}
+              chart="line"
+            />
           </CardContent>
         </Card>
         <Card>
@@ -99,7 +103,11 @@ export default async function SubwayPaymentsPage({ searchParams }: PageProps) {
             <p className="text-sm text-muted-foreground">Cada color representa el importe cobrado por año según la sucursal filtrada.</p>
           </CardHeader>
           <CardContent>
-            <DashboardBranchesMultiBarChart data={dashboard.amountTrend} keys={dashboard.branchKeys} />
+            <DashboardBranchesMetricView
+              data={dashboard.amountTrend}
+              keys={dashboard.branchKeys}
+              chart="bar"
+            />
           </CardContent>
         </Card>
       </section>

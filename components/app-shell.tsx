@@ -19,27 +19,7 @@ import { logoutAction } from "@/modules/auth/server/actions";
 const navigation = [
   {
     href: "/dashboard",
-    label: "Inicio",
-    icon: LayoutDashboard,
-  },
-  {
-    href: "/dashboard/subway/ventas",
-    label: "Sucursales",
-    icon: LayoutDashboard,
-  },
-  {
-    href: "/dashboard/subway/pagos",
-    label: "Pagos",
-    icon: LayoutDashboard,
-  },
-  // {
-  //   href: "/dashboard/subway/auditoria",
-  //   label: "Auditoria",
-  //   icon: LayoutDashboard,
-  // },
-  {
-    href: "/dashboard/subway/cruce",
-    label: "Mix",
+    label: "Dashboard",
     icon: LayoutDashboard,
   },
   {
@@ -67,7 +47,7 @@ function SidebarContent({
   const visibleNavigation = navigation.filter((item) => canAccessSidebarPath(user.role, item.href));
 
   return (
-    <div className="flex h-full min-h-0 flex-col justify-between gap-6">
+    <div className="flex h-full min-h-0 flex-col justify-between gap-5">
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex items-center gap-3 px-1">
           <div className="rounded-2xl bg-white/10 p-3 shadow-lg shadow-black/20">
@@ -88,7 +68,7 @@ function SidebarContent({
                 href={href}
                 onClick={onNavigate}
                 className={[
-                  "group flex items-center gap-3 rounded-2xl px-4 py-3 text-sm transition",
+                  "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition",
                   active
                     ? "bg-white text-slate-950 shadow-lg shadow-black/20"
                     : "text-slate-200 hover:bg-white/10 hover:text-white",
@@ -102,13 +82,13 @@ function SidebarContent({
         </nav>
       </div>
 
-      <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 backdrop-blur">
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur">
         <div className="min-w-0">
           <p className="truncate font-medium text-white">{user.fullName ?? user.email}</p>
           <p className="mt-1 text-sm text-slate-300">{roleLabels[user.role]}</p>
         </div>
         <form action={logoutAction} className="mt-4">
-          <button className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/10">
+          <button className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 px-3 py-2.5 text-sm font-medium text-white transition hover:bg-white/10">
             <LogOut className="size-4" />
             Cerrar sesion
           </button>
@@ -184,11 +164,11 @@ export function AppShell({
         </div>
       ) : null}
 
-      <aside className="fixed inset-y-0 left-0 z-30 hidden h-[100dvh] w-[290px] overflow-hidden border-r border-white/10 bg-[linear-gradient(180deg,rgba(6,18,30,0.98)_0%,rgba(10,28,46,0.98)_100%)] px-6 py-8 text-sidebar-foreground shadow-2xl lg:block">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden h-[100dvh] w-[260px] overflow-hidden border-r border-white/10 bg-[linear-gradient(180deg,rgba(6,18,30,0.98)_0%,rgba(10,28,46,0.98)_100%)] px-5 py-6 text-sidebar-foreground shadow-2xl lg:block">
         <SidebarContent user={user} pathname={pathname} />
       </aside>
 
-      <main className="min-w-0 px-3 pb-6 pt-24 sm:px-6 lg:ml-[290px] lg:min-h-screen lg:px-8 lg:py-8">
+      <main className="min-w-0 px-3 pb-5 pt-20 sm:px-5 lg:ml-[260px] lg:min-h-screen lg:px-6 lg:py-6">
         {children}
       </main>
     </div>

@@ -12,76 +12,77 @@ export default async function SubwaySalesPage({ searchParams }: PageProps) {
   const dashboard = await getDashboardBranches(await searchParams);
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-[2rem] border border-border bg-[radial-gradient(circle_at_top_left,rgba(0,137,56,0.2),transparent_28%),radial-gradient(circle_at_top_right,rgba(37,99,235,0.16),transparent_30%),linear-gradient(135deg,#ffffff_0%,#f8fafc_100%)] p-8 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-muted-foreground">Comparativo entre sucursales</p>
-        <h1 className="mt-3 max-w-3xl text-4xl font-semibold tracking-tight text-foreground">
+    <div className="space-y-5">
+      <section className="rounded-3xl border border-border bg-[radial-gradient(circle_at_top_left,rgba(0,137,56,0.2),transparent_28%),radial-gradient(circle_at_top_right,rgba(37,99,235,0.16),transparent_30%),linear-gradient(135deg,#ffffff_0%,#f8fafc_100%)] p-6 shadow-sm">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">Comparativo entre sucursales</p>
+        <h1 className="mt-2 max-w-3xl text-2xl font-semibold tracking-tight text-foreground lg:text-3xl">
           Rendimiento comercial, ticket y volumen por sede
         </h1>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
           Esta vista compara sucursales sobre la capa diaria consolidada, enfocada en ventas, operaciones y variedad de surtido.
         </p>
-        <div className="mt-5 inline-flex rounded-full border border-border bg-background/80 px-4 py-2 text-sm text-muted-foreground">
+        <div className="mt-4 inline-flex rounded-full border border-border bg-background/80 px-3.5 py-1.5 text-sm text-muted-foreground">
           {dashboard.activePeriodLabel}
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>Filtros</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <DashboardRangeFilterForm
-              action="/dashboard/subway/ventas"
-              filters={dashboard.filters}
-              availableYears={dashboard.availableYears}
-              branch={dashboard.filters.branch}
-              branches={dashboard.availableBranches}
-            />
-          </CardContent>
-        </Card>
+      <Card>
+        <CardHeader className="pb-4">
+          <CardTitle>Filtros</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <DashboardRangeFilterForm
+            action="/dashboard/subway/ventas"
+            filters={dashboard.filters}
+            availableYears={dashboard.availableYears}
+            branch={dashboard.filters.branch}
+            branches={dashboard.availableBranches}
+            layout="inline"
+          />
+        </CardContent>
+      </Card>
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:col-span-2 xl:grid-cols-3">
+      <section>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <Card>
             <CardHeader><CardTitle>Ventas totales</CardTitle></CardHeader>
             <CardContent>
-              <p className="text-3xl font-semibold">{formatCurrency(dashboard.kpis.totalSales)}</p>
+              <p className="text-2xl font-semibold">{formatCurrency(dashboard.kpis.totalSales)}</p>
               <p className="mt-2 text-sm text-muted-foreground">Suma de ventas visibles en el comparativo.</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle>Operaciones</CardTitle></CardHeader>
             <CardContent>
-              <p className="text-3xl font-semibold">{formatNumber(dashboard.kpis.totalOperations)}</p>
+              <p className="text-2xl font-semibold">{formatNumber(dashboard.kpis.totalOperations)}</p>
               <p className="mt-2 text-sm text-muted-foreground">Operaciones registradas en el periodo.</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle>Ticket promedio</CardTitle></CardHeader>
             <CardContent>
-              <p className="text-3xl font-semibold">{formatCurrency(dashboard.kpis.averageTicket)}</p>
+              <p className="text-2xl font-semibold">{formatCurrency(dashboard.kpis.averageTicket)}</p>
               <p className="mt-2 text-sm text-muted-foreground">Promedio global por operación.</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle>Unidades</CardTitle></CardHeader>
             <CardContent>
-              <p className="text-3xl font-semibold">{formatNumber(dashboard.kpis.totalUnits)}</p>
+              <p className="text-2xl font-semibold">{formatNumber(dashboard.kpis.totalUnits)}</p>
               <p className="mt-2 text-sm text-muted-foreground">Volumen agregado vendido.</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle>Sucursales activas</CardTitle></CardHeader>
             <CardContent>
-              <p className="text-3xl font-semibold">{formatNumber(dashboard.kpis.activeBranches)}</p>
+              <p className="text-2xl font-semibold">{formatNumber(dashboard.kpis.activeBranches)}</p>
               <p className="mt-2 text-sm text-muted-foreground">Sedes con datos para este corte.</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle>Productos por día</CardTitle></CardHeader>
             <CardContent>
-              <p className="text-3xl font-semibold">{formatNumber(dashboard.kpis.averageProductsPerDay)}</p>
+              <p className="text-2xl font-semibold">{formatNumber(dashboard.kpis.averageProductsPerDay)}</p>
               <p className="mt-2 text-sm text-muted-foreground">Promedio de variedad diaria visible.</p>
             </CardContent>
           </Card>
