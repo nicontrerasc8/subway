@@ -430,14 +430,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             <SectionTitle
               eyebrow="Familias"
               title="Mix tipo Excel"
-              description="Familias comerciales, adjuntos y porcentajes que antes se revisaban en columnas del Excel."
+              description="Categorías de la base de datos comparadas año contra año y con participación sobre unidades."
             />
 
             <section className="grid gap-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>Unidades por familia</CardTitle>
-                  <p className="text-sm text-muted-foreground">Comparativo anual de SUB 15CM, SUB 30CM, combos, bebidas, extras y otros grupos.</p>
+                  <CardTitle>Unidades por categoría</CardTitle>
+                  <p className="text-sm text-muted-foreground">Comparativo anual usando las mismas categorías del mix comercial.</p>
                 </CardHeader>
                 <CardContent>
                   <DashboardBranchesMetricView
@@ -451,7 +451,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             </section>
 
             <Card>
-              <CardHeader><CardTitle>Peso de familias comerciales</CardTitle></CardHeader>
+              <CardHeader><CardTitle>Peso de categorías comerciales</CardTitle></CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {commercial.productGroupShares.map((item) => (
                   <div key={item.label} className="rounded-2xl border p-4">

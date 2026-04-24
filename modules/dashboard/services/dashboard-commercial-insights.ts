@@ -214,31 +214,30 @@ function getDeliveryPlatform(value: string | null) {
 }
 
 function getCommercialProductGroup(product: string | null, category: string | null) {
-  const normalized = normalizeText(product ?? "");
-  const normalizedCategory = normalizeText(category ?? "");
-  const combined = `${normalized} ${normalizedCategory}`;
+  if (category?.trim()) return category.trim();
 
-  if (combined.includes("SUB") && combined.includes("15")) return "SUB 15CM";
-  if (combined.includes("SUB") && combined.includes("30")) return "SUB 30CM";
-  if (combined.includes("DEL DIA") || combined.includes("DIA")) return "DEL DIA";
-  if (combined.includes("WRAP")) return "WRAPS";
-  if (combined.includes("ENSALADA")) return "ENSALADA";
-  if (combined.includes("MAYOQUESO")) return "Mayoqueso";
-  if (combined.includes("2X1") || combined.includes("2 X") || combined.includes("PROMO")) return "Promos";
-  if (combined.includes("COMBO")) return "Combos";
+  const normalized = normalizeText(product ?? "");
+
+  if (normalized.includes("SUB") && normalized.includes("15")) return "SUB 15 CM";
+  if (normalized.includes("SUB") && normalized.includes("30")) return "SUB 30 CM";
+  if (normalized.includes("DEL DIA") || normalized.includes("DIA")) return "DEL DIA";
+  if (normalized.includes("WRAP")) return "WRAPS";
+  if (normalized.includes("ENSALADA")) return "ENSALADA";
+  if (normalized.includes("MAYOQUESO")) return "Mayoqueso";
+  if (normalized.includes("2X1") || normalized.includes("2 X") || normalized.includes("PROMO")) return "PROMOS";
+  if (normalized.includes("COMBO")) return "COMBO";
   if (
-    combined.includes("SODA") ||
-    combined.includes("BEBIDA") ||
-    combined.includes("GASEOSA") ||
-    combined.includes("AGUA")
+    normalized.includes("SODA") ||
+    normalized.includes("BEBIDA") ||
+    normalized.includes("GASEOSA") ||
+    normalized.includes("AGUA")
   ) {
-    return "Bebidas";
+    return "COMPLEMENTOS";
   }
-  if (combined.includes("PAPA")) return "Papas";
-  if (combined.includes("EXTRA")) return "Extras";
-  if (combined.includes("GALLETA") || combined.includes("COOKIE")) return "Galletas";
-  if (normalizedCategory === "COMPLEMENTOS") return "Complementos";
-  return normalizedCategory || "OTROS";
+  if (normalized.includes("PAPA")) return "COMPLEMENTOS";
+  if (normalized.includes("EXTRA")) return "COMPLEMENTOS";
+  if (normalized.includes("GALLETA") || normalized.includes("COOKIE")) return "COMPLEMENTOS";
+  return "OTROS";
 }
 
 function getAttachmentGroup(product: string | null, category: string | null) {
