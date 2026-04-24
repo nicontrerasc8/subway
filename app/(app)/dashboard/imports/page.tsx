@@ -2,7 +2,11 @@ import { forbidden } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth/session";
 import { ImportsPageView } from "@/modules/imports/components/imports-page-view";
-import { canAccessImports, listRecentImports } from "@/modules/imports/services/import-service";
+import {
+  canAccessImports,
+  listRecentImports,
+  listSubwayBranches,
+} from "@/modules/imports/services/import-service";
 
 export default async function ImportsPage() {
   const user = await getCurrentUser();
@@ -11,7 +15,10 @@ export default async function ImportsPage() {
     forbidden();
   }
 
-  const imports = await listRecentImports();
+  const [imports, branches] = await Promise.all([
+    listRecentImports(),
+    listSubwayBranches(),
+  ]);
 
-  return <ImportsPageView imports={imports} />;
+  return <ImportsPageView imports={imports} branches={branches} />;
 }

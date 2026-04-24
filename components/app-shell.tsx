@@ -19,7 +19,27 @@ import { logoutAction } from "@/modules/auth/server/actions";
 const navigation = [
   {
     href: "/dashboard",
-    label: "Dashboard",
+    label: "Inicio",
+    icon: LayoutDashboard,
+  },
+  {
+    href: "/dashboard/subway/ventas",
+    label: "Sucursales",
+    icon: LayoutDashboard,
+  },
+  {
+    href: "/dashboard/subway/pagos",
+    label: "Pagos",
+    icon: LayoutDashboard,
+  },
+  {
+    href: "/dashboard/subway/auditoria",
+    label: "Auditoria",
+    icon: LayoutDashboard,
+  },
+  {
+    href: "/dashboard/subway/cruce",
+    label: "Mix",
     icon: LayoutDashboard,
   },
   {
@@ -31,6 +51,7 @@ const navigation = [
 
 function isActivePath(pathname: string, href: string) {
   if (pathname === href) return true;
+  if (href !== "/dashboard" && pathname.startsWith(`${href}/`)) return true;
   return false;
 }
 

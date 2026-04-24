@@ -1,9 +1,8 @@
-import { Suspense } from "react";
 import { forbidden } from "next/navigation";
 
+import { DashboardResetView } from "@/app/(app)/dashboard/_components/dashboard-reset-view";
 import { canAccessExecutiveDashboards } from "@/lib/auth/roles";
 import { getCurrentUser } from "@/lib/auth/session";
-import { BacklogRankingDetailView } from "@/modules/dashboard/components/backlog-ranking-detail-view";
 import { getBacklogMatrixSummary } from "@/modules/dashboard/services/backlog-matrix";
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
@@ -25,17 +24,14 @@ export default async function BacklogDetailPage({
 
   const summary = await getBacklogMatrixSummary();
   const query = await searchParams;
-  const scope = getParam(query.scope);
 
   return (
-    <Suspense fallback={null}>
-      <BacklogRankingDetailView
-      summary={summary}
-      scope={scope === "clientes" || scope === "ejecutivos" ? scope : "lineas"}
-      basePath="/dashboard/backlog"
-      eyebrow="Dashboard backlog"
-      title="Detalle de rankings de backlog"
+    <DashboardResetView
+      title="Detalle backlog"
+      route="/dashboard/backlog/detalle"
+      data={summary}
       filters={{
+        scope: getParam(query.scope),
         anio: getParam(query.anio),
         negocio: getParam(query.negocio),
         etapa: getParam(query.etapa),
@@ -44,7 +40,6 @@ export default async function BacklogDetailPage({
         linea: getParam(query.linea),
         mes: getParam(query.mes),
       }}
-      />
-    </Suspense>
+    />
   );
 }

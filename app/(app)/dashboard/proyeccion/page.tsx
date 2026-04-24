@@ -1,8 +1,8 @@
 import { forbidden } from "next/navigation";
 
+import { DashboardResetView } from "@/app/(app)/dashboard/_components/dashboard-reset-view";
 import { canAccessExecutiveDashboards } from "@/lib/auth/roles";
 import { getCurrentUser } from "@/lib/auth/session";
-import { BacklogMatrixDashboard } from "@/modules/dashboard/components/backlog-matrix-dashboard";
 import { getProjectionMatrixSummary } from "@/modules/dashboard/services/projection-matrix";
 
 export default async function ProjectionPage() {
@@ -14,18 +14,5 @@ export default async function ProjectionPage() {
 
   const summary = await getProjectionMatrixSummary();
 
-  return (
-    <BacklogMatrixDashboard
-      summary={summary}
-      eyebrow="Dashboard proyección"
-      title="Proyección por línea y mes"
-      description=""
-      cardTitle="Matriz de proyección"
-      totalLabel="Proyección total"
-      emptyLabel="No hay proyección para el negocio seleccionado."
-      totalVisibleLabel="Total proyección visible:"
-      showSituacionBreakdown={false}
-      defaultEtapaValue="informacion"
-    />
-  );
+  return <DashboardResetView title="Proyeccion" route="/dashboard/proyeccion" data={summary} />;
 }

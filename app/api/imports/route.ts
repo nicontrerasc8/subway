@@ -29,6 +29,11 @@ export async function POST(request: Request) {
     const file = formData.get("file");
     const rawFecha = formData.get("fecha");
     const fecha = typeof rawFecha === "string" && rawFecha.trim() ? rawFecha.trim() : null;
+    const rawSucursalId = formData.get("sucursal_id");
+    const sucursalId =
+      typeof rawSucursalId === "string" && rawSucursalId.trim()
+        ? Number(rawSucursalId)
+        : null;
     const rawSourceKey = formData.get("source_key");
     const sourceKey =
       typeof rawSourceKey === "string" &&
@@ -46,6 +51,7 @@ export async function POST(request: Request) {
     const result = await createImportFromUpload(file, currentUser, {
       fecha,
       sourceKey,
+      sucursalId,
     });
 
     return NextResponse.json(result, { status: 201 });

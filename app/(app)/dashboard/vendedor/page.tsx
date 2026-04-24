@@ -1,8 +1,8 @@
 import { forbidden } from "next/navigation";
 
+import { DashboardResetView } from "@/app/(app)/dashboard/_components/dashboard-reset-view";
 import { canAccessSellerDashboard } from "@/lib/auth/roles";
 import { getCurrentUser } from "@/lib/auth/session";
-import { SellerDashboardView } from "@/modules/dashboard/components/seller-dashboard-view";
 import { getSellerDashboardSummary } from "@/modules/dashboard/services/seller-dashboard";
 
 export default async function SellerDashboardPage() {
@@ -14,5 +14,5 @@ export default async function SellerDashboardPage() {
 
   const summary = await getSellerDashboardSummary();
 
-  return <SellerDashboardView summary={summary} />;
+  return <DashboardResetView title="Panel vendedor" route="/dashboard/vendedor" data={summary} />;
 }

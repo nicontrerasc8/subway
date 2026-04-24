@@ -21,6 +21,8 @@ export interface ImportRecord {
   anio: number | null;
   fecha: string | null;
   source_key?: string | null;
+  sucursal_id: number;
+  sucursal?: string | null;
   uploaded_by: string;
   uploaded_at: string;
   status: "pending" | "processing" | "processed" | "failed";

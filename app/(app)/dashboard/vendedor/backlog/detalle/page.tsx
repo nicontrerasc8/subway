@@ -1,9 +1,8 @@
-import { Suspense } from "react";
 import { forbidden } from "next/navigation";
 
+import { DashboardResetView } from "@/app/(app)/dashboard/_components/dashboard-reset-view";
 import { canAccessSellerDashboard } from "@/lib/auth/roles";
 import { getCurrentUser } from "@/lib/auth/session";
-import { BacklogRankingDetailView } from "@/modules/dashboard/components/backlog-ranking-detail-view";
 import { getExecutiveBacklogMatrixSummary } from "@/modules/dashboard/services/executive-backlog-matrix";
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
@@ -25,17 +24,14 @@ export default async function SellerBacklogDetailPage({
 
   const summary = await getExecutiveBacklogMatrixSummary();
   const query = await searchParams;
-  const scope = getParam(query.scope);
 
   return (
-    <Suspense fallback={null}>
-      <BacklogRankingDetailView
-      summary={summary}
-      scope={scope === "clientes" || scope === "ejecutivos" ? scope : "lineas"}
-      basePath="/dashboard/vendedor/backlog"
-      eyebrow="Dashboard ejecutivo"
-      title="Detalle de mis rankings de backlog"
+    <DashboardResetView
+      title="Detalle mi backlog"
+      route="/dashboard/vendedor/backlog/detalle"
+      data={summary}
       filters={{
+        scope: getParam(query.scope),
         anio: getParam(query.anio),
         negocio: getParam(query.negocio),
         etapa: getParam(query.etapa),
@@ -44,7 +40,6 @@ export default async function SellerBacklogDetailPage({
         linea: getParam(query.linea),
         mes: getParam(query.mes),
       }}
-      />
-    </Suspense>
+    />
   );
 }

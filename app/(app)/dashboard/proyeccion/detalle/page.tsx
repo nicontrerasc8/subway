@@ -1,9 +1,8 @@
-import { Suspense } from "react";
 import { forbidden } from "next/navigation";
 
+import { DashboardResetView } from "@/app/(app)/dashboard/_components/dashboard-reset-view";
 import { canAccessExecutiveDashboards } from "@/lib/auth/roles";
 import { getCurrentUser } from "@/lib/auth/session";
-import { BacklogRankingDetailView } from "@/modules/dashboard/components/backlog-ranking-detail-view";
 import { getProjectionMatrixSummary } from "@/modules/dashboard/services/projection-matrix";
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
@@ -25,17 +24,14 @@ export default async function ProjectionDetailPage({
 
   const summary = await getProjectionMatrixSummary();
   const query = await searchParams;
-  const scope = getParam(query.scope);
 
   return (
-    <Suspense fallback={null}>
-      <BacklogRankingDetailView
-      summary={summary}
-      scope={scope === "clientes" || scope === "ejecutivos" ? scope : "lineas"}
-      basePath="/dashboard/proyeccion"
-      eyebrow="Dashboard proyección"
-      title="Detalle de rankings de proyección"
+    <DashboardResetView
+      title="Detalle proyeccion"
+      route="/dashboard/proyeccion/detalle"
+      data={summary}
       filters={{
+        scope: getParam(query.scope),
         anio: getParam(query.anio),
         negocio: getParam(query.negocio),
         etapa: getParam(query.etapa),
@@ -44,7 +40,6 @@ export default async function ProjectionDetailPage({
         linea: getParam(query.linea),
         mes: getParam(query.mes),
       }}
-      />
-    </Suspense>
+    />
   );
 }

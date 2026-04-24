@@ -1,8 +1,8 @@
 import { forbidden } from "next/navigation";
 
+import { DashboardResetView } from "@/app/(app)/dashboard/_components/dashboard-reset-view";
 import { canAccessExecutiveDashboards } from "@/lib/auth/roles";
 import { getCurrentUser } from "@/lib/auth/session";
-import { BacklogMatrixDashboard } from "@/modules/dashboard/components/backlog-matrix-dashboard";
 import { getBacklogMatrixSummary } from "@/modules/dashboard/services/backlog-matrix";
 
 export default async function BacklogPage() {
@@ -14,5 +14,5 @@ export default async function BacklogPage() {
 
   const summary = await getBacklogMatrixSummary();
 
-  return <BacklogMatrixDashboard summary={summary} showEtapaFilter={false} />;
+  return <DashboardResetView title="Backlog" route="/dashboard/backlog" data={summary} />;
 }

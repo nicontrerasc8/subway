@@ -1,8 +1,8 @@
 import { forbidden } from "next/navigation";
 
+import { DashboardResetView } from "@/app/(app)/dashboard/_components/dashboard-reset-view";
 import { canAccessExecutiveDashboards } from "@/lib/auth/roles";
 import { getCurrentUser } from "@/lib/auth/session";
-import { SalesYearComparisonDashboard } from "@/modules/dashboard/components/sales-year-comparison-dashboard";
 import { getSalesByClientSummary } from "@/modules/dashboard/services/sales-by-client";
 
 export default async function SalesYearComparisonPage() {
@@ -14,5 +14,5 @@ export default async function SalesYearComparisonPage() {
 
   const summary = await getSalesByClientSummary();
 
-  return <SalesYearComparisonDashboard summary={summary} />;
+  return <DashboardResetView title="Comparativo anual" route="/dashboard/comparativo-anual" data={summary} />;
 }

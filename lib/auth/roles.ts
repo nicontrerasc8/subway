@@ -46,6 +46,10 @@ export function canAccessSidebarPath(role: AppRole, path: string) {
     return true;
   }
 
+  if (path.startsWith("/dashboard/subway")) {
+    return true;
+  }
+
   if (path === "/dashboard/imports") {
     return canManageImports(role);
   }

@@ -3,22 +3,33 @@ import "server-only";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export type SubwaySaleRow = {
+  id: number;
   importId: string;
   fileName: string;
   uploadedAt: string;
   fecha: string | null;
+  anio: number | null;
+  sourceKey: string | null;
+  sucursalId: number | null;
+  sucursal: string | null;
   rowNumber: number;
   referencia: string;
   descripcion: string;
+  categoria: string;
   unidades: number;
   total: number;
 };
 
 export type SubwayPaymentRow = {
+  id: number;
   importId: string;
   fileName: string;
   uploadedAt: string;
   fecha: string | null;
+  anio: number | null;
+  sourceKey: string | null;
+  sucursalId: number | null;
+  sucursal: string | null;
   rowNumber: number;
   formaPago: string;
   importe: number;
@@ -39,22 +50,31 @@ export type SubwaySalesSummary = {
   paymentRows: SubwayPaymentRow[];
 };
 
-type SalesProductFactRow = {
+type SalesProductDetailRow = {
+  id: number;
   import_id: string | null;
-  row_number: number;
-  fecha: string;
+  fecha: string | null;
+  anio: number | null;
+  source_key: string | null;
+  sucursal_id: number | null;
+  sucursal: string | null;
   referencia: string | null;
-  producto: string;
+  producto: string | null;
+  categoria: string | null;
   unidades: number | string | null;
   ventas: number | string | null;
   created_at: string | null;
 };
 
-type SalesPaymentFactRow = {
+type SalesPaymentDetailRow = {
+  id: number;
   import_id: string | null;
-  row_number: number;
-  fecha: string;
-  forma_pago: string;
+  fecha: string | null;
+  anio: number | null;
+  source_key: string | null;
+  sucursal_id: number | null;
+  sucursal: string | null;
+  forma_pago: string | null;
   importe: number | string | null;
   operaciones: number | string | null;
   created_at: string | null;
@@ -70,28 +90,28 @@ function toNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function toText(value: unknown) {
-  if (typeof value === "string") return value.trim();
+function toText(value: unknown, fallback = "") {
+  if (typeof value === "string") return value.trim() || fallback;
   if (typeof value === "number") return String(value);
-  return "";
+  return fallback;
 }
 
-async function fetchSalesProductFacts() {
+async function fetchSalesProductDetails() {
   const supabase = await createServerSupabaseClient();
-  const rows: SalesProductFactRow[] = [];
+  const rows: SalesProductDetailRow[] = [];
   let from = 0;
 
   while (true) {
     const { data, error } = await supabase
-      .from("sales_product")
-      .select("import_id, row_number, fecha, referencia, producto, unidades, ventas, created_at")
+      .from("v_sales_product_detail")
+      .select("id, import_id, fecha, anio, source_key, sucursal_id, sucursal, referencia, producto, categoria, unidades, ventas, created_at")
       .order("fecha", { ascending: true })
-      .order("row_number", { ascending: true })
+      .order("id", { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
 
     if (error) throw error;
 
-    const page = (data ?? []) as SalesProductFactRow[];
+    const page = (data ?? []) as SalesProductDetailRow[];
     rows.push(...page);
 
     if (page.length < PAGE_SIZE) break;
@@ -101,22 +121,22 @@ async function fetchSalesProductFacts() {
   return rows;
 }
 
-async function fetchSalesPaymentFacts() {
+async function fetchSalesPaymentDetails() {
   const supabase = await createServerSupabaseClient();
-  const rows: SalesPaymentFactRow[] = [];
+  const rows: SalesPaymentDetailRow[] = [];
   let from = 0;
 
   while (true) {
     const { data, error } = await supabase
-      .from("sales_payment")
-      .select("import_id, row_number, fecha, forma_pago, importe, operaciones, created_at")
+      .from("v_sales_payment_detail")
+      .select("id, import_id, fecha, anio, source_key, sucursal_id, sucursal, forma_pago, importe, operaciones, created_at")
       .order("fecha", { ascending: true })
-      .order("row_number", { ascending: true })
+      .order("id", { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
 
     if (error) throw error;
 
-    const page = (data ?? []) as SalesPaymentFactRow[];
+    const page = (data ?? []) as SalesPaymentDetailRow[];
     rows.push(...page);
 
     if (page.length < PAGE_SIZE) break;
@@ -127,16 +147,16 @@ async function fetchSalesPaymentFacts() {
 }
 
 export async function getSubwaySalesSummary(): Promise<SubwaySalesSummary> {
-  let salesFacts: SalesProductFactRow[] = [];
-  let paymentFacts: SalesPaymentFactRow[] = [];
+  let salesFacts: SalesProductDetailRow[] = [];
+  let paymentFacts: SalesPaymentDetailRow[] = [];
 
   try {
     [salesFacts, paymentFacts] = await Promise.all([
-      fetchSalesProductFacts(),
-      fetchSalesPaymentFacts(),
+      fetchSalesProductDetails(),
+      fetchSalesPaymentDetails(),
     ]);
   } catch (error) {
-    console.error("[dashboard][subway-sales] Error al leer sales_product/sales_payment", error);
+    console.error("[dashboard][subway-sales] Error al leer vistas Subway", error);
 
     return {
       importCount: 0,
@@ -153,25 +173,36 @@ export async function getSubwaySalesSummary(): Promise<SubwaySalesSummary> {
     };
   }
 
-  const rows = salesFacts.map((fact) => ({
+  const rows = salesFacts.map((fact, index) => ({
+    id: fact.id,
     importId: fact.import_id ?? "",
-    fileName: "sales_product",
-    uploadedAt: fact.created_at ?? fact.fecha,
+    fileName: "v_sales_product_detail",
+    uploadedAt: fact.created_at ?? fact.fecha ?? "",
     fecha: fact.fecha,
-    rowNumber: fact.row_number,
+    anio: fact.anio,
+    sourceKey: fact.source_key,
+    sucursalId: fact.sucursal_id,
+    sucursal: fact.sucursal,
+    rowNumber: index + 1,
     referencia: toText(fact.referencia),
-    descripcion: fact.producto,
+    descripcion: toText(fact.producto),
+    categoria: toText(fact.categoria, "OTROS"),
     unidades: toNumber(fact.unidades),
     total: toNumber(fact.ventas),
   }));
 
-  const paymentRows = paymentFacts.map((fact) => ({
+  const paymentRows = paymentFacts.map((fact, index) => ({
+    id: fact.id,
     importId: fact.import_id ?? "",
-    fileName: "sales_payment",
-    uploadedAt: fact.created_at ?? fact.fecha,
+    fileName: "v_sales_payment_detail",
+    uploadedAt: fact.created_at ?? fact.fecha ?? "",
     fecha: fact.fecha,
-    rowNumber: fact.row_number,
-    formaPago: fact.forma_pago,
+    anio: fact.anio,
+    sourceKey: fact.source_key,
+    sucursalId: fact.sucursal_id,
+    sucursal: fact.sucursal,
+    rowNumber: index + 1,
+    formaPago: toText(fact.forma_pago),
     importe: toNumber(fact.importe),
     numeroOperaciones: toNumber(fact.operaciones),
   }));
@@ -182,8 +213,8 @@ export async function getSubwaySalesSummary(): Promise<SubwaySalesSummary> {
   const totalOperations = paymentRows.reduce((sum, row) => sum + row.numeroOperaciones, 0);
 
   return {
-    importCount: new Set(rows.map((row) => row.importId || row.fecha || "")).size,
-    paymentImportCount: new Set(paymentRows.map((row) => row.importId || row.fecha || "")).size,
+    importCount: new Set(rows.map((row) => row.importId)).size,
+    paymentImportCount: new Set(paymentRows.map((row) => row.importId)).size,
     rowCount: rows.length,
     paymentRowCount: paymentRows.length,
     totalUnits,
