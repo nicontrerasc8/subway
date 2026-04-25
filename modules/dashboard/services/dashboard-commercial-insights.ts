@@ -296,8 +296,6 @@ export async function getDashboardCommercialInsights(
   const filteredPaymentRows = paymentRows.filter((row) => matchesFilters(row, filters));
   const filteredProductRows = productRows.filter((row) => matchesFilters(row, filters));
   const { currentYear, previousYear, yearKeys } = getComparisonYears(filteredTicketRows);
-  const platformKeys = ["Peya", "Rappi", "Turbo", "Didi"];
-
   const totalByYear = filteredTicketRows.reduce((map, row) => {
     const year = getDateYear(row.fecha);
     if (!year) return map;
@@ -327,6 +325,19 @@ export async function getDashboardCommercialInsights(
     platformCurrent[year].transactions += toNumber(row.operaciones);
     deliveryByPlatform.set(platform, platformCurrent);
   }
+
+  const platformOrder = ["Peya", "Rappi", "Turbo", "Didi"];
+  const platformKeys = Array.from(deliveryByPlatform.keys()).sort((a, b) => {
+    const aIndex = platformOrder.indexOf(a);
+    const bIndex = platformOrder.indexOf(b);
+    if (aIndex !== -1 || bIndex !== -1) {
+      return (aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex) - (bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex);
+    }
+
+    const aTotal = yearKeys.reduce((sum, year) => sum + (deliveryByPlatform.get(a)?.[year]?.sales ?? 0), 0);
+    const bTotal = yearKeys.reduce((sum, year) => sum + (deliveryByPlatform.get(b)?.[year]?.sales ?? 0), 0);
+    return bTotal - aTotal;
+  });
 
   const deliverySalesByPlatform = platformKeys.map((platform) => {
     const byYear = deliveryByPlatform.get(platform) ?? {};

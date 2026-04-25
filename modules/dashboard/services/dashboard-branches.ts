@@ -69,6 +69,16 @@ export type DashboardBranchRankingPoint = {
   averageProducts: number;
 };
 
+export type DashboardBranchDailyPoint = {
+  fecha: string;
+  branchId: number | null;
+  branch: string;
+  sales: number;
+  units: number;
+  operations: number;
+  products: number;
+};
+
 export type DashboardBranchesData = {
   filters: DashboardBranchesFilters;
   availableYears: string[];
@@ -80,6 +90,7 @@ export type DashboardBranchesData = {
   branchRanking: DashboardBranchRankingPoint[];
   dailyTrend: DashboardBranchesChartPoint[];
   monthlyTrend: DashboardBranchesChartPoint[];
+  dailyRows: DashboardBranchDailyPoint[];
 };
 
 function toNumber(value: unknown) {
@@ -270,6 +281,17 @@ export async function getDashboardBranches(
   const totalUnits = filteredDaily.reduce((sum, row) => sum + toNumber(row.unidades_totales), 0);
   const totalOperations = filteredDaily.reduce((sum, row) => sum + toNumber(row.operaciones_totales), 0);
   const totalProducts = filteredDaily.reduce((sum, row) => sum + toNumber(row.productos_distintos), 0);
+  const dailyRowsForClient = filteredDaily
+    .filter((row) => row.fecha)
+    .map((row) => ({
+      fecha: row.fecha ?? "",
+      branchId: row.sucursal_id,
+      branch: row.sucursal ?? "Sin sucursal",
+      sales: toNumber(row.ventas_totales),
+      units: toNumber(row.unidades_totales),
+      operations: toNumber(row.operaciones_totales),
+      products: toNumber(row.productos_distintos),
+    }));
 
   return {
     filters,
@@ -289,5 +311,6 @@ export async function getDashboardBranches(
     branchRanking,
     dailyTrend,
     monthlyTrend,
+    dailyRows: dailyRowsForClient,
   };
 }

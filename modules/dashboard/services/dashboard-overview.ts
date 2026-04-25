@@ -139,6 +139,16 @@ export type DashboardOverviewReconciliationPoint = {
   diferencia: number;
 };
 
+export type DashboardOverviewDailyPoint = {
+  fecha: string;
+  sales: number;
+  units: number;
+  operations: number;
+  products: number;
+  paymentAmount: number;
+  reconciliationDelta: number;
+};
+
 export type DashboardOverviewData = {
   filters: DashboardOverviewFilters;
   availableYears: string[];
@@ -155,6 +165,7 @@ export type DashboardOverviewData = {
   branchRanking: DashboardOverviewBranchPoint[];
   topProducts: DashboardOverviewProductPoint[];
   reconciliation: DashboardOverviewReconciliationPoint[];
+  dailyRows: DashboardOverviewDailyPoint[];
 };
 
 function toNumber(value: unknown) {
@@ -455,6 +466,42 @@ export async function getDashboardOverview(
     }))
     .sort((a, b) => Math.abs(b.diferencia) - Math.abs(a.diferencia))
     .slice(0, 8);
+  const paymentsByDate = filteredPayments.reduce((map, row) => {
+    if (!row.fecha) return map;
+    map.set(row.fecha, (map.get(row.fecha) ?? 0) + toNumber(row.importe));
+    return map;
+  }, new Map<string, number>());
+  const reconciliationByDate = filteredReconciliation.reduce((map, row) => {
+    if (!row.fecha) return map;
+    map.set(row.fecha, (map.get(row.fecha) ?? 0) + toNumber(row.diferencia));
+    return map;
+  }, new Map<string, number>());
+  const dailyRowsForClient = Array.from(
+    filteredDaily.reduce((map, row) => {
+      if (!row.fecha) return map;
+      const current = map.get(row.fecha) ?? {
+        fecha: row.fecha,
+        sales: 0,
+        units: 0,
+        operations: 0,
+        products: 0,
+        paymentAmount: 0,
+        reconciliationDelta: 0,
+      };
+      current.sales += toNumber(row.ventas_totales);
+      current.units += toNumber(row.unidades_totales);
+      current.operations += toNumber(row.operaciones_totales);
+      current.products += toNumber(row.productos_distintos);
+      map.set(row.fecha, current);
+      return map;
+    }, new Map<string, DashboardOverviewDailyPoint>()),
+  )
+    .map(([, value]) => ({
+      ...value,
+      paymentAmount: paymentsByDate.get(value.fecha) ?? 0,
+      reconciliationDelta: reconciliationByDate.get(value.fecha) ?? 0,
+    }))
+    .sort((a, b) => a.fecha.localeCompare(b.fecha));
 
   return {
     filters,
@@ -479,5 +526,6 @@ export async function getDashboardOverview(
     branchRanking,
     topProducts,
     reconciliation,
+    dailyRows: dailyRowsForClient,
   };
 }

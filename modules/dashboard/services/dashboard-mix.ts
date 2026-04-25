@@ -81,6 +81,27 @@ export type DashboardMixProductComparisonPoint = DashboardMixProductPoint & {
   label: string;
   byYear: Record<string, number>;
   byBranch: Record<string, number>;
+  byBranchYear: Record<string, number>;
+};
+
+export type DashboardMixCategoryDailyPoint = {
+  fecha: string;
+  branchId: number | null;
+  branch: string;
+  category: string;
+  units: number;
+  sales: number;
+};
+
+export type DashboardMixProductDailyPoint = {
+  fecha: string;
+  branchId: number | null;
+  branch: string;
+  reference: string;
+  product: string;
+  category: string;
+  units: number;
+  sales: number;
 };
 
 export type DashboardMixBranchPoint = {
@@ -105,6 +126,8 @@ export type DashboardMixData = {
   productBranchKeys: string[];
   globalProducts: DashboardMixProductPoint[];
   topBranches: DashboardMixBranchPoint[];
+  categoryDailyRows: DashboardMixCategoryDailyPoint[];
+  productDailyRows: DashboardMixProductDailyPoint[];
 };
 
 function toNumber(value: unknown) {
@@ -234,7 +257,25 @@ export async function getDashboardMix(
     .sort((a, b) => b.ventas - a.ventas)
     .slice(0, 10);
 
-  const topProductRefs = new Set(topProducts.map((product) => product.referencia));
+  const allProducts = Array.from(
+    filteredProducts.reduce((map, row) => {
+      const key = row.referencia ?? row.producto ?? "sin-producto";
+      const current = map.get(key) ?? {
+        referencia: row.referencia ?? "-",
+        producto: row.producto ?? "Sin producto",
+        categoria: row.categoria ?? "Sin categoria",
+        ventas: 0,
+        unidades: 0,
+      };
+      current.ventas += toNumber(row.ventas);
+      current.unidades += toNumber(row.unidades);
+      map.set(key, current);
+      return map;
+    }, new Map<string, DashboardMixProductPoint>()),
+  )
+    .map(([, value]) => value)
+    .sort((a, b) => b.ventas - a.ventas);
+  const productRefs = new Set(allProducts.map((product) => product.referencia));
   const productYearKeys = Array.from(
     new Set(filteredProducts.map((row) => getDateYear(row.fecha)).filter(Boolean) as string[]),
   ).sort((a, b) => Number(a) - Number(b));
@@ -253,7 +294,7 @@ export async function getDashboardMix(
   const productComparison = Array.from(
     filteredProducts.reduce((map, row) => {
       const reference = row.referencia ?? row.producto ?? "sin-producto";
-      if (!topProductRefs.has(row.referencia ?? "-")) return map;
+      if (!productRefs.has(row.referencia ?? "-")) return map;
 
       const current = map.get(reference) ?? {
         referencia: row.referencia ?? "-",
@@ -264,6 +305,7 @@ export async function getDashboardMix(
         unidades: 0,
         byYear: {},
         byBranch: {},
+        byBranchYear: {},
       };
       const sales = toNumber(row.ventas);
       const units = toNumber(row.unidades);
@@ -275,6 +317,7 @@ export async function getDashboardMix(
       if (year) current.byYear[year] = (current.byYear[year] ?? 0) + sales;
       if (branch && productBranchKeys.includes(branch)) {
         current.byBranch[branch] = (current.byBranch[branch] ?? 0) + sales;
+        if (year) current.byBranchYear[`${branch}__${year}`] = (current.byBranchYear[`${branch}__${year}`] ?? 0) + sales;
       }
       map.set(reference, current);
       return map;
@@ -346,5 +389,27 @@ export async function getDashboardMix(
     productBranchKeys,
     globalProducts,
     topBranches,
+    categoryDailyRows: filteredCategories
+      .filter((row) => row.fecha)
+      .map((row) => ({
+        fecha: row.fecha ?? "",
+        branchId: row.sucursal_id,
+        branch: row.sucursal ?? "Sin sucursal",
+        category: row.categoria ?? "Sin categoria",
+        units: toNumber(row.unidades),
+        sales: toNumber(row.ventas),
+      })),
+    productDailyRows: filteredProducts
+      .filter((row) => row.fecha)
+      .map((row) => ({
+        fecha: row.fecha ?? "",
+        branchId: row.sucursal_id,
+        branch: row.sucursal ?? "Sin sucursal",
+        reference: row.referencia ?? "-",
+        product: row.producto ?? "Sin producto",
+        category: row.categoria ?? "Sin categoria",
+        units: toNumber(row.unidades),
+        sales: toNumber(row.ventas),
+      })),
   };
 }

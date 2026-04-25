@@ -76,6 +76,23 @@ export type DashboardPaymentsBranchPoint = {
   averageTicket: number;
 };
 
+export type DashboardPaymentTicketDailyPoint = {
+  fecha: string;
+  branchId: number | null;
+  branch: string;
+  amount: number;
+  operations: number;
+};
+
+export type DashboardPaymentMethodDailyPoint = {
+  fecha: string;
+  branchId: number | null;
+  branch: string;
+  method: string;
+  amount: number;
+  operations: number;
+};
+
 export type DashboardPaymentsData = {
   filters: DashboardPaymentsFilters;
   availableYears: string[];
@@ -88,6 +105,8 @@ export type DashboardPaymentsData = {
   paymentsByBranch: DashboardPaymentsBranchPoint[];
   ticketTrend: DashboardPaymentsChartPoint[];
   amountTrend: DashboardPaymentsChartPoint[];
+  ticketDailyRows: DashboardPaymentTicketDailyPoint[];
+  paymentDailyRows: DashboardPaymentMethodDailyPoint[];
 };
 
 function toNumber(value: unknown) {
@@ -294,6 +313,25 @@ export async function getDashboardPayments(
 
   const totalAmount = filteredTicketRows.reduce((sum, row) => sum + toNumber(row.importe_total), 0);
   const totalOperations = filteredTicketRows.reduce((sum, row) => sum + toNumber(row.operaciones_totales), 0);
+  const ticketDailyRows = filteredTicketRows
+    .filter((row) => row.fecha)
+    .map((row) => ({
+      fecha: row.fecha ?? "",
+      branchId: row.sucursal_id,
+      branch: row.sucursal ?? "Sin sucursal",
+      amount: toNumber(row.importe_total),
+      operations: toNumber(row.operaciones_totales),
+    }));
+  const paymentDailyRows = filteredPaymentRows
+    .filter((row) => row.fecha)
+    .map((row) => ({
+      fecha: row.fecha ?? "",
+      branchId: row.sucursal_id,
+      branch: row.sucursal ?? "Sin sucursal",
+      method: row.forma_pago ?? "Sin forma de pago",
+      amount: toNumber(row.importe),
+      operations: toNumber(row.operaciones),
+    }));
 
   return {
     filters,
@@ -313,5 +351,7 @@ export async function getDashboardPayments(
     paymentsByBranch,
     ticketTrend,
     amountTrend,
+    ticketDailyRows,
+    paymentDailyRows,
   };
 }
