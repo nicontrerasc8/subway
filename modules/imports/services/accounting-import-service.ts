@@ -332,29 +332,14 @@ export async function createAccountingImportFromUpload(
   console.log("anio_importacion", importYear);
   console.log("hoja", parsed.sheetName);
   console.log("columnas", parsed.columns);
-  console.log("filas", importData.rows);
-  console.log(
-    "filas_debajo_de_comercial",
-    buildRowsBelowSectionPreview(parsed.rowsBelowSections.Comercial),
-  );
-  console.table(buildRowsBelowSectionPreview(parsed.rowsBelowSections.Comercial));
-  console.log(
-    "filas_mensuales_comercial",
-    parsed.monthlyRowsBySection.Comercial,
-  );
-  console.table(flattenMonthlySectionRows(parsed.monthlyRowsBySection.Comercial));
-  console.log(
-    "filas_debajo_de_industrial",
-    buildRowsBelowSectionPreview(parsed.rowsBelowSections.Industrial),
-  );
-  console.table(buildRowsBelowSectionPreview(parsed.rowsBelowSections.Industrial));
-  console.log(
-    "filas_mensuales_industrial",
-    parsed.monthlyRowsBySection.Industrial,
-  );
-  console.table(flattenMonthlySectionRows(parsed.monthlyRowsBySection.Industrial));
+  console.log("filas_debajo_de_comercial", parsed.rowsBelowSections.Comercial.length);
+  console.log("filas_mensuales_comercial", parsed.monthlyRowsBySection.Comercial.length);
+  console.table(flattenMonthlySectionRows(parsed.monthlyRowsBySection.Comercial).slice(0, 10));
+  console.log("filas_debajo_de_industrial", parsed.rowsBelowSections.Industrial.length);
+  console.log("filas_mensuales_industrial", parsed.monthlyRowsBySection.Industrial.length);
+  console.table(flattenMonthlySectionRows(parsed.monthlyRowsBySection.Industrial).slice(0, 10));
   console.table(
-    importData.rows.map((row) => ({
+    importData.rows.slice(0, 10).map((row) => ({
       fila_excel: row.row_number,
       columna_a: row.payload.columna_a,
       marca_columna_a: row.payload.marca_columna_a ?? "",
@@ -497,7 +482,7 @@ export async function saveAccountingImportFromPreview(
   console.log("usuario", currentUser.id);
   console.log("anio_importacion", input.importYear);
   console.log("hoja", input.sheetName);
-  console.log("filas", rows);
+  console.log("total_filas", rows.length);
   console.groupEnd();
 
   const { data: importRow, error } = await supabase

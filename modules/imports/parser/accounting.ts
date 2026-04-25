@@ -253,11 +253,10 @@ export async function parseAccountingWorkbook(file: File) {
     })),
   );
   console.log("total_filas_parseadas", parsedRows.length);
-  console.log("filas", parsedRows);
-  console.log("filas_debajo_de_comercial", rowsBelowSections.Comercial);
-  console.log("filas_mensuales_comercial", monthlyRowsBySection.Comercial);
+  console.log("filas_debajo_de_comercial", rowsBelowSections.Comercial.length);
+  console.log("filas_mensuales_comercial", monthlyRowsBySection.Comercial.length);
   console.table(
-    monthlyRowsBySection.Comercial.map((row) => ({
+    monthlyRowsBySection.Comercial.slice(0, 10).map((row) => ({
       fila_excel: row.fila_excel,
       linea: row.linea,
       enero_ventas: row.meses.enero.ventas,
@@ -286,10 +285,10 @@ export async function parseAccountingWorkbook(file: File) {
       diciembre_margen_bruto: row.meses.diciembre.margen_bruto,
     })),
   );
-  console.log("filas_debajo_de_industrial", rowsBelowSections.Industrial);
-  console.log("filas_mensuales_industrial", monthlyRowsBySection.Industrial);
+  console.log("filas_debajo_de_industrial", rowsBelowSections.Industrial.length);
+  console.log("filas_mensuales_industrial", monthlyRowsBySection.Industrial.length);
   console.table(
-    monthlyRowsBySection.Industrial.map((row) => ({
+    monthlyRowsBySection.Industrial.slice(0, 10).map((row) => ({
       fila_excel: row.fila_excel,
       linea: row.linea,
       enero_ventas: row.meses.enero.ventas,
@@ -319,7 +318,7 @@ export async function parseAccountingWorkbook(file: File) {
     })),
   );
   console.table(
-    parsedRows.map((row) => ({
+    parsedRows.slice(0, 10).map((row) => ({
       fila_excel: row.rowNumber,
       columna_a: row.payload.columna_a,
       marca_columna_a: row.payload.marca_columna_a ?? "",
