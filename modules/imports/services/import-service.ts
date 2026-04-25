@@ -5,7 +5,6 @@ import { revalidatePath } from "next/cache";
 import { requireRoleAccess } from "@/lib/auth/authorization";
 import { canManageImports, importManagerRoles } from "@/lib/auth/roles";
 import type { CurrentUser } from "@/lib/auth/session";
-import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { AppRole, ImportFactRow, ImportRecord } from "@/lib/types/database";
 import {
@@ -24,7 +23,7 @@ import {
 export const importAccessRoles = importManagerRoles;
 
 type ImportAccessRole = (typeof importAccessRoles)[number];
-type SupabaseAdminClient = ReturnType<typeof createAdminSupabaseClient>;
+type SupabaseServerClient = Awaited<ReturnType<typeof createServerSupabaseClient>>;
 
 type ImportJsonRow = {
   id: number;
@@ -405,11 +404,11 @@ function buildProductCatalogRows(data: ImportJsonPayload) {
   return [...products.values()];
 }
 
-async function syncProductsCatalog(admin: SupabaseAdminClient, data: ImportJsonPayload) {
+async function syncProductsCatalog(supabase: SupabaseServerClient, data: ImportJsonPayload) {
   const products = buildProductCatalogRows(data);
   if (!products.length) return;
 
-  const { error } = await admin.from("products_subway").upsert(products, {
+  const { error } = await supabase.from("products_subway").upsert(products, {
     onConflict: "referencia",
   });
 
@@ -420,13 +419,13 @@ async function syncProductsCatalog(admin: SupabaseAdminClient, data: ImportJsonP
 }
 
 async function rematerializeSalesFacts(
-  admin: SupabaseAdminClient,
+  supabase: SupabaseServerClient,
   importId: string,
   data: ImportJsonPayload,
 ) {
   const [{ error: productDeleteError }, { error: paymentDeleteError }] = await Promise.all([
-    admin.from("sales_product").delete().eq("import_id", importId),
-    admin.from("sales_payment").delete().eq("import_id", importId),
+    supabase.from("sales_product").delete().eq("import_id", importId),
+    supabase.from("sales_payment").delete().eq("import_id", importId),
   ]);
 
   if (productDeleteError || paymentDeleteError) {
@@ -441,7 +440,7 @@ async function rematerializeSalesFacts(
     const paymentRows = buildSalesPaymentRows(importId, data);
     if (!paymentRows.length) return;
 
-    const { error } = await admin.from("sales_payment").insert(paymentRows);
+    const { error } = await supabase.from("sales_payment").insert(paymentRows);
 
     if (error) {
       console.error("[imports][service] Error al guardar sales_payment", error);
@@ -451,11 +450,11 @@ async function rematerializeSalesFacts(
     return;
   }
 
-  await syncProductsCatalog(admin, data);
+  await syncProductsCatalog(supabase, data);
   const productRows = buildSalesProductRows(importId, data);
   if (!productRows.length) return;
 
-  const { error } = await admin.from("sales_product").insert(productRows);
+  const { error } = await supabase.from("sales_product").insert(productRows);
 
   if (error) {
     console.error("[imports][service] Error al guardar sales_product", error);
@@ -526,8 +525,8 @@ async function getProfilesById(userIds: string[]) {
 }
 
 async function getImportRowForEdit(importId: string) {
-  const admin = createAdminSupabaseClient();
-  const { data, error } = await admin
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase
     .from("imports_subway")
     .select("id, fecha, data")
     .eq("id", importId)
@@ -565,7 +564,7 @@ export async function createImportFromUpload(
   currentUser: CurrentUser,
   options: { fecha?: string | null; sourceKey?: SubwayImportSourceKey; sucursalId?: number | null } = {},
 ) {
-  const admin = createAdminSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   validateImportFile(file);
 
   const sourceKey = options.sourceKey ?? "ax-commercial";
@@ -603,7 +602,7 @@ export async function createImportFromUpload(
   console.table(buildImportDebugSummary(importData, 10));
   console.groupEnd();
 
-  const { data: importRow, error: importError } = await admin
+  const { data: importRow, error: importError } = await supabase
     .from("imports_subway")
     .insert({
       file_name: file.name,
@@ -632,9 +631,9 @@ export async function createImportFromUpload(
   const importId = importRow.id as string;
 
   try {
-    await rematerializeSalesFacts(admin, importId, importData);
+    await rematerializeSalesFacts(supabase, importId, importData);
   } catch (error) {
-    await admin
+    await supabase
       .from("imports_subway")
       .update({
         status: "failed",
@@ -648,7 +647,7 @@ export async function createImportFromUpload(
     throw error;
   }
 
-  const { error: updateError } = await admin
+  const { error: updateError } = await supabase
     .from("imports_subway")
     .update({
       status: "processed",
@@ -742,8 +741,8 @@ export async function updateImportMetadata(
   await requireRoleAccess([...importAccessRoles] as ImportAccessRole[]);
   const parsed = updateImportSchema.parse(input);
 
-  const admin = createAdminSupabaseClient();
-  const { error } = await admin
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase
     .from("imports_subway")
     .update({ anio: parsed.anio })
     .eq("id", importId);
@@ -759,17 +758,17 @@ export async function updateImportMetadata(
 export async function deleteImport(importId: string) {
   await requireRoleAccess([...importAccessRoles] as ImportAccessRole[]);
 
-  const admin = createAdminSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   const [{ error: productError }, { error: paymentError }] = await Promise.all([
-    admin.from("sales_product").delete().eq("import_id", importId),
-    admin.from("sales_payment").delete().eq("import_id", importId),
+    supabase.from("sales_product").delete().eq("import_id", importId),
+    supabase.from("sales_payment").delete().eq("import_id", importId),
   ]);
 
   if (productError || paymentError) {
     throw new Error("No se pudieron limpiar los hechos asociados a la importacion.");
   }
 
-  const { error } = await admin
+  const { error } = await supabase
     .from("imports_subway")
     .delete()
     .eq("id", importId);
@@ -797,8 +796,8 @@ export async function deleteImportFactRow(importId: string, rowId: number) {
     getParseErrors: (row) => row.parse_errors,
   });
 
-  const admin = createAdminSupabaseClient();
-  const { error } = await admin
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase
     .from("imports_subway")
     .update({
       data: {
@@ -816,7 +815,7 @@ export async function deleteImportFactRow(importId: string, rowId: number) {
     throw new Error("No se pudo eliminar la fila de la importacion.");
   }
 
-  await rematerializeSalesFacts(admin, importId, {
+  await rematerializeSalesFacts(supabase, importId, {
     ...importData,
     rows: nextRows,
     audit: nextAudit,
@@ -971,8 +970,8 @@ export async function updateImportFactRow(
     getParseErrors: (row) => row.parse_errors,
   });
 
-  const admin = createAdminSupabaseClient();
-  const { error } = await admin
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase
     .from("imports_subway")
     .update({
       data: {
@@ -990,7 +989,7 @@ export async function updateImportFactRow(
     throw new Error("No se pudo actualizar la fila de la importacion.");
   }
 
-  await rematerializeSalesFacts(admin, importId, {
+  await rematerializeSalesFacts(supabase, importId, {
     ...importData,
     rows: nextRows,
     audit: nextAudit,

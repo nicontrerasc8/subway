@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 
 import { requireRoleAccess } from "@/lib/auth/authorization";
 import type { CurrentUser } from "@/lib/auth/session";
-import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { ImportRecord } from "@/lib/types/database";
 import {
@@ -304,8 +303,8 @@ function parseAccountingImportData(value: unknown): AccountingImportJsonPayload 
 }
 
 async function getAccountingImportRowForEdit(importId: string) {
-  const admin = createAdminSupabaseClient();
-  const { data, error } = await admin
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase
     .from("accounting_imports")
     .select("id, data")
     .eq("id", importId)
@@ -447,7 +446,7 @@ export async function saveAccountingImportFromPreview(
   input: AccountingPreviewSaveInput,
   currentUser: CurrentUser,
 ) {
-  const admin = createAdminSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   const rows = normalizeAccountingPreviewSaveRows(input);
   const audit = buildImportAudit({
     rows,
@@ -501,7 +500,7 @@ export async function saveAccountingImportFromPreview(
   console.log("filas", rows);
   console.groupEnd();
 
-  const { data: importRow, error } = await admin
+  const { data: importRow, error } = await supabase
     .from("accounting_imports")
     .insert({
       file_name: input.fileName,
@@ -557,8 +556,8 @@ export async function listRecentAccountingImports() {
 export async function deleteAccountingImport(importId: string) {
   await requireRoleAccess([...importAccessRoles]);
 
-  const admin = createAdminSupabaseClient();
-  const { error } = await admin
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase
     .from("accounting_imports")
     .delete()
     .eq("id", importId);
@@ -606,8 +605,8 @@ export async function updateAccountingImportMetadata(
     anio: input.anio,
   });
 
-  const admin = createAdminSupabaseClient();
-  const { error } = await admin
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase
     .from("accounting_imports")
     .update(parsed)
     .eq("id", importId);
@@ -679,8 +678,8 @@ export async function updateAccountingImportRow(
     getParseErrors: (row) => row.parse_errors,
   });
 
-  const admin = createAdminSupabaseClient();
-  const { error } = await admin
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase
     .from("accounting_imports")
     .update({
       data: {
@@ -716,8 +715,8 @@ export async function deleteAccountingImportRow(importId: string, rowId: number)
     getParseErrors: (row) => row.parse_errors,
   });
 
-  const admin = createAdminSupabaseClient();
-  const { error } = await admin
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase
     .from("accounting_imports")
     .update({
       data: {

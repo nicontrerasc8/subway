@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, useTransition } from "react";
+import { useEffect, useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LoaderCircle, Trash2, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
@@ -204,8 +204,12 @@ function ImportUploadCard({
 }
 
 function ImportHistoryCard({ imports }: { imports: ImportRecord[] }) {
-  const router = useRouter();
+  const [visibleImports, setVisibleImports] = useState(imports);
   const [deletingImportId, setDeletingImportId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setVisibleImports(imports);
+  }, [imports]);
 
   async function handleDeleteImport(importId: string) {
     const confirmed = window.confirm(
@@ -226,7 +230,7 @@ function ImportHistoryCard({ imports }: { imports: ImportRecord[] }) {
         throw new Error(payload.error ?? "No se pudo eliminar la importacion.");
       }
 
-      router.refresh();
+      setVisibleImports((current) => current.filter((item) => item.id !== importId));
       toast.success("Importacion eliminada.");
     } catch (error) {
       toast.error(
@@ -260,8 +264,8 @@ function ImportHistoryCard({ imports }: { imports: ImportRecord[] }) {
               </tr>
             </thead>
             <tbody>
-              {imports.length ? (
-                imports.map((item) => (
+              {visibleImports.length ? (
+                visibleImports.map((item) => (
                   <tr key={item.id} className="border-b last:border-b-0">
                     <td className="px-4 py-3 font-medium">{item.file_name}</td>
                     <td className="px-4 py-3">
