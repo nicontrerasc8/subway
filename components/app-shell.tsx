@@ -29,6 +29,9 @@ const navigation = [
   },
 ];
 
+const sidebarShellClass =
+  "bg-[linear-gradient(180deg,#008938_0%,#007a33_48%,#005f27_100%)] text-white shadow-2xl";
+
 function isActivePath(pathname: string, href: string) {
   if (pathname === href) return true;
   if (href !== "/dashboard" && pathname.startsWith(`${href}/`)) return true;
@@ -50,11 +53,9 @@ function SidebarContent({
     <div className="flex h-full min-h-0 flex-col justify-between gap-5">
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex items-center gap-3 px-1">
-          <div className="rounded-2xl bg-white/10 p-3 shadow-lg shadow-black/20">
-            <Building2 className="size-6" />
-          </div>
+      
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-300">Subway</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white">Subway</p>
           </div>
         </div>
 
@@ -70,11 +71,11 @@ function SidebarContent({
                 className={[
                   "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition",
                   active
-                    ? "bg-white text-slate-950 shadow-lg shadow-black/20"
-                    : "text-slate-200 hover:bg-white/10 hover:text-white",
+                    ? "bg-[#ffc600] text-[#004c1f] shadow-lg shadow-black/20"
+                    : "text-white/85 hover:bg-white/12 hover:text-white",
                 ].join(" ")}
               >
-                <Icon className={active ? "size-4 text-slate-900" : "size-4 text-slate-300 group-hover:text-white"} />
+                <Icon className={active ? "size-4 text-[#004c1f]" : "size-4 text-[#ffc600] group-hover:text-white"} />
                 <span className="min-w-0 break-words font-medium">{label}</span>
               </Link>
             );
@@ -85,10 +86,10 @@ function SidebarContent({
       <div className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur">
         <div className="min-w-0">
           <p className="truncate font-medium text-white">{user.fullName ?? user.email}</p>
-          <p className="mt-1 text-sm text-slate-300">{roleLabels[user.role]}</p>
+          <p className="mt-1 text-sm text-[#ffc600]">{roleLabels[user.role]}</p>
         </div>
         <form action={logoutAction} className="mt-4">
-          <button className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 px-3 py-2.5 text-sm font-medium text-white transition hover:bg-white/10">
+          <button className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#ffc600]/35 px-3 py-2.5 text-sm font-medium text-white transition hover:bg-[#ffc600] hover:text-[#004c1f]">
             <LogOut className="size-4" />
             Cerrar sesion
           </button>
@@ -141,16 +142,16 @@ export function AppShell({
             aria-label="Cerrar menu"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="absolute inset-y-0 left-0 flex h-[100dvh] w-[min(92vw,24rem)] flex-col bg-[linear-gradient(180deg,rgba(6,18,30,0.98)_0%,rgba(10,28,46,0.98)_100%)] px-4 py-4 text-sidebar-foreground shadow-2xl sm:px-5 sm:py-5">
+          <aside className={`absolute inset-y-0 left-0 flex h-[100dvh] w-[min(92vw,24rem)] flex-col px-4 py-4 sm:px-5 sm:py-5 ${sidebarShellClass}`}>
             <div className="mb-4 flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-xs uppercase tracking-[0.24em] text-slate-300">Navegacion</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#ffc600]">Navegacion</p>
                 <p className="mt-1 truncate text-sm font-medium text-white">{user.fullName ?? user.email}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setMobileOpen(false)}
-                className="rounded-2xl border border-white/10 bg-white/5 p-3 text-white"
+                className="rounded-2xl border border-[#ffc600]/35 bg-white/10 p-3 text-white hover:bg-[#ffc600] hover:text-[#004c1f]"
                 aria-label="Cerrar menu"
               >
                 <X className="size-5" />
@@ -164,7 +165,7 @@ export function AppShell({
         </div>
       ) : null}
 
-      <aside className="fixed inset-y-0 left-0 z-30 hidden h-[100dvh] w-[260px] overflow-hidden border-r border-white/10 bg-[linear-gradient(180deg,rgba(6,18,30,0.98)_0%,rgba(10,28,46,0.98)_100%)] px-5 py-6 text-sidebar-foreground shadow-2xl lg:block">
+      <aside className={`fixed inset-y-0 left-0 z-30 hidden h-[100dvh] w-[260px] overflow-hidden border-r border-[#ffc600]/25 px-5 py-6 lg:block ${sidebarShellClass}`}>
         <SidebarContent user={user} pathname={pathname} />
       </aside>
 
