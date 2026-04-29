@@ -208,7 +208,7 @@ export default async function SubwayHistoricalPage({ searchParams }: PageProps) 
       </section>
 
       <section className="grid gap-4 lg:grid-cols-4">
-        {dashboard.insights.map((insight:any, index:any) => (
+        {dashboard.insights.map((insight, index) => (
           <Card key={insight}>
             <CardContent className="pt-6">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
