@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   Building2,
+  History,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -26,6 +27,11 @@ const navigation = [
     href: "/dashboard/imports",
     label: "Importaciones",
     icon: UploadCloud,
+  },
+  {
+    href: "/dashboard/subway/historico",
+    label: "Historico",
+    icon: History,
   },
 ];
 
