@@ -6,7 +6,6 @@ import {
   getDateMonth,
   getMonthLabel,
   getSearchParamValue,
-  matchesDateRange,
   resolveDateRangeFilters,
   type DashboardDateRangeFilters,
   type DashboardDateRangeSearchParams,
@@ -16,29 +15,18 @@ const PAGE_SIZE = 1000;
 const DETAIL_ROW_LIMIT = 500;
 const SALES_METRICS = ["VENTA_TOTAL", "VENTA_SALON", "VENTA_DELIVERY"];
 const CLIENT_METRICS = ["CLIENTES_TOTAL", "CLIENTES_SALON", "CLIENTES_DELIVERY"];
-
-type HistoricalMetricDbRow = {
-  id: number;
-  sucursal_id: number;
-  fecha: string;
-  anio: number;
-  semana: number;
-  dia_semana: number;
-  metrica: string;
-  valor: number | string;
-  source_key: string;
-  source_file_name: string | null;
-  source_sheet_name: string | null;
-  created_at: string;
-  sucursales_subway?: { nombre: string | null } | { nombre: string | null }[] | null;
-};
+const ALL_METRICS = [...SALES_METRICS, ...CLIENT_METRICS];
 
 export type HistoricalMetricsSearchParams = DashboardDateRangeSearchParams & {
   branch?: string | string[];
+  dateFrom?: string | string[];
+  dateTo?: string | string[];
 };
 
 export type HistoricalMetricsFilters = DashboardDateRangeFilters & {
   branch: string | null;
+  dateFrom: string | null;
+  dateTo: string | null;
 };
 
 export type HistoricalMetricDetailRow = {
@@ -84,6 +72,43 @@ export type HistoricalMetricChartPoint = {
   [key: string]: string | number;
 };
 
+export type HistoricalYearlyPoint = {
+  anio: number;
+  label: string;
+  ventaTotal: number;
+  clientesTotal: number;
+  ticketPromedio: number;
+  ventaSalon: number;
+  ventaDelivery: number;
+  clientesSalon: number;
+  clientesDelivery: number;
+  deliveryShare: number;
+  salesGrowthPct: number | null;
+  clientsGrowthPct: number | null;
+};
+
+export type HistoricalPeriodPoint = {
+  label: string;
+  ventaTotal: number;
+  clientesTotal: number;
+  ticketPromedio: number;
+};
+
+export type HistoricalBranchPerformancePoint = {
+  branchId: number;
+  branch: string;
+  ventaTotal: number;
+  clientesTotal: number;
+  ticketPromedio: number;
+  ventaDelivery: number;
+  deliveryShare: number;
+};
+
+export type HistoricalMixPoint = {
+  label: string;
+  value: number;
+};
+
 export type HistoricalMetricsData = {
   filters: HistoricalMetricsFilters;
   availableYears: string[];
@@ -102,6 +127,13 @@ export type HistoricalMetricsData = {
   clientMetricKeys: string[];
   metricSummary: HistoricalMetricSummaryPoint[];
   branchSummary: HistoricalBranchSummaryPoint[];
+  yearly: HistoricalYearlyPoint[];
+  monthlyPerformance: HistoricalPeriodPoint[];
+  weekdayPerformance: HistoricalPeriodPoint[];
+  branchPerformance: HistoricalBranchPerformancePoint[];
+  salesMix: HistoricalMixPoint[];
+  clientMix: HistoricalMixPoint[];
+  insights: string[];
   monthlySalesTrend: HistoricalMetricChartPoint[];
   monthlyClientTrend: HistoricalMetricChartPoint[];
   detailRows: HistoricalMetricDetailRow[];
@@ -109,21 +141,43 @@ export type HistoricalMetricsData = {
   detailRowsLimit: number;
 };
 
-type MetricSummaryAgg = Omit<HistoricalMetricSummaryPoint, "sucursales"> & {
-  sucursalesSet: Set<number>;
+type HistoricalOptionRow = {
+  anio: number | null;
+  sucursal_id: number | null;
+  sucursal: string | null;
 };
 
-type BranchSummaryAgg = Omit<HistoricalBranchSummaryPoint, "metricas"> & {
-  metricasSet: Set<string>;
+type HistoricalDailyBranchRow = {
+  fecha: string | null;
+  anio: number | null;
+  semana: number | null;
+  dia_semana: number | null;
+  sucursal_id: number | null;
+  sucursal: string | null;
+  venta_total: number | string | null;
+  venta_salon: number | string | null;
+  venta_delivery: number | string | null;
+  clientes_total: number | string | null;
+  clientes_salon: number | string | null;
+  clientes_delivery: number | string | null;
+  ticket_promedio: number | string | null;
 };
 
-function isSalesMetric(metric: string) {
-  return metric.startsWith("VENTA_");
-}
-
-function isClientMetric(metric: string) {
-  return metric.startsWith("CLIENTES_");
-}
+type HistoricalFactRow = {
+  id: number;
+  fecha: string | null;
+  anio: number | null;
+  semana: number | null;
+  dia_semana: number | null;
+  sucursal_id: number | null;
+  sucursal: string | null;
+  metrica: string | null;
+  valor: number | string | null;
+  source_key: string | null;
+  source_file_name: string | null;
+  source_sheet_name: string | null;
+  created_at: string | null;
+};
 
 function toNumber(value: unknown) {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
@@ -133,81 +187,13 @@ function toNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function resolveBranchName(row: HistoricalMetricDbRow) {
-  const relation = Array.isArray(row.sucursales_subway)
-    ? row.sucursales_subway[0]
-    : row.sucursales_subway;
-
-  return relation?.nombre?.trim() || `Sucursal ${row.sucursal_id}`;
+function safeRatio(numerator: number, denominator: number) {
+  return denominator > 0 ? numerator / denominator : 0;
 }
 
-async function fetchHistoricalRows() {
-  const supabase = await createServerSupabaseClient();
-  const rows: HistoricalMetricDbRow[] = [];
-  let from = 0;
-
-  while (true) {
-    const { data, error } = await supabase
-      .from("historical_metrics_subway")
-      .select(
-        "id, sucursal_id, fecha, anio, semana, dia_semana, metrica, valor, source_key, source_file_name, source_sheet_name, created_at, sucursales_subway(nombre)",
-      )
-      .order("fecha", { ascending: false })
-      .order("id", { ascending: false })
-      .range(from, from + PAGE_SIZE - 1);
-
-    if (error) throw error;
-
-    const page = (data ?? []) as HistoricalMetricDbRow[];
-    rows.push(...page);
-
-    if (page.length < PAGE_SIZE) break;
-    from += PAGE_SIZE;
-  }
-
-  return rows;
-}
-
-function resolveFilters(searchParams: HistoricalMetricsSearchParams, rows: HistoricalMetricDetailRow[]) {
-  const availableYears = Array.from(new Set(rows.map((row) => String(row.anio))))
-    .filter(Boolean)
-    .sort((a, b) => Number(b) - Number(a));
-  const availableBranches = Array.from(
-    new Map(
-      rows.map((row) => [
-        String(row.sucursalId),
-        { id: String(row.sucursalId), label: row.sucursal },
-      ]),
-    ).values(),
-  ).sort((a, b) => a.label.localeCompare(b.label));
-  const requestedBranch = getSearchParamValue(searchParams.branch);
-  const dateRangeFilters = resolveDateRangeFilters(searchParams, availableYears);
-  const filters: HistoricalMetricsFilters = {
-    ...dateRangeFilters,
-    branch:
-      requestedBranch && availableBranches.some((branch) => branch.id === requestedBranch)
-        ? requestedBranch
-        : null,
-  };
-
-  return {
-    filters,
-    availableYears,
-    availableBranches,
-    activePeriodLabel: [
-      formatDateRangeLabel(filters),
-      filters.branch
-        ? availableBranches.find((branch) => branch.id === filters.branch)?.label ?? "Sucursal"
-        : "Todas las sucursales",
-      "Data historica",
-    ].join(" · "),
-  };
-}
-
-function matchesFilters(row: HistoricalMetricDetailRow, filters: HistoricalMetricsFilters) {
-  if (!matchesDateRange(row.fecha, filters)) return false;
-  if (filters.branch && String(row.sucursalId) !== filters.branch) return false;
-  return true;
+function safeGrowth(current: number, previous: number) {
+  if (!previous) return null;
+  return ((current - previous) / previous) * 100;
 }
 
 function minDate(current: string | null, next: string) {
@@ -220,129 +206,420 @@ function maxDate(current: string | null, next: string) {
   return next > current ? next : current;
 }
 
+function isDateValue(value: string | undefined) {
+  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+}
+
+function getLastDayOfMonth(year: string, month: string) {
+  return new Date(Number(year), Number(month), 0).getDate();
+}
+
+function getDateBounds(filters: HistoricalMetricsFilters) {
+  const dateFrom = filters.dateFrom
+    ?? (filters.yearFrom ? `${filters.yearFrom}-${String(filters.monthFrom ?? "1").padStart(2, "0")}-01` : null);
+  const dateTo = filters.dateTo
+    ?? (
+      filters.yearTo
+        ? `${filters.yearTo}-${String(filters.monthTo ?? "12").padStart(2, "0")}-${String(getLastDayOfMonth(filters.yearTo, filters.monthTo ?? "12")).padStart(2, "0")}`
+        : null
+    );
+
+  return { dateFrom, dateTo };
+}
+
+function getMetricValue(row: HistoricalDailyBranchRow, metric: string) {
+  if (metric === "VENTA_TOTAL") return toNumber(row.venta_total);
+  if (metric === "VENTA_SALON") return toNumber(row.venta_salon);
+  if (metric === "VENTA_DELIVERY") return toNumber(row.venta_delivery);
+  if (metric === "CLIENTES_TOTAL") return toNumber(row.clientes_total);
+  if (metric === "CLIENTES_SALON") return toNumber(row.clientes_salon);
+  if (metric === "CLIENTES_DELIVERY") return toNumber(row.clientes_delivery);
+  return 0;
+}
+
+function applySupabaseFilters<T extends { eq: (...args: [string, string]) => T; gte: (...args: [string, string]) => T; lte: (...args: [string, string]) => T }>(
+  query: T,
+  filters: HistoricalMetricsFilters,
+) {
+  const { dateFrom, dateTo } = getDateBounds(filters);
+  let nextQuery = query;
+
+  if (filters.branch) nextQuery = nextQuery.eq("sucursal_id", filters.branch);
+  if (dateFrom) nextQuery = nextQuery.gte("fecha", dateFrom);
+  if (dateTo) nextQuery = nextQuery.lte("fecha", dateTo);
+
+  return nextQuery;
+}
+
+async function fetchOptionRows() {
+  const supabase = await createServerSupabaseClient();
+  const rows: HistoricalOptionRow[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("v_historical_subway_daily_branch")
+    .select("anio, sucursal_id, sucursal")
+    .order("anio", { ascending: false })
+      .order("sucursal", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) throw error;
+
+    const page = (data ?? []) as HistoricalOptionRow[];
+    rows.push(...page);
+
+    if (page.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  return rows;
+}
+
+function resolveFilters(searchParams: HistoricalMetricsSearchParams, optionRows: HistoricalOptionRow[]) {
+  const availableYears = Array.from(
+    new Set(optionRows.map((row) => (row.anio ? String(row.anio) : null)).filter(Boolean) as string[]),
+  ).sort((a, b) => Number(b) - Number(a));
+  const availableBranches = Array.from(
+    new Map(
+      optionRows
+        .filter((row) => row.sucursal_id !== null)
+        .map((row) => [
+          String(row.sucursal_id),
+          { id: String(row.sucursal_id), label: row.sucursal ?? `Sucursal ${row.sucursal_id}` },
+        ]),
+    ).values(),
+  ).sort((a, b) => a.label.localeCompare(b.label));
+  const requestedBranch = getSearchParamValue(searchParams.branch);
+  const requestedDateFrom = getSearchParamValue(searchParams.dateFrom);
+  const requestedDateTo = getSearchParamValue(searchParams.dateTo);
+  const dateRangeFilters = resolveDateRangeFilters(searchParams, availableYears);
+  const filters: HistoricalMetricsFilters = {
+    ...dateRangeFilters,
+    branch:
+      requestedBranch && availableBranches.some((branch) => branch.id === requestedBranch)
+        ? requestedBranch
+        : null,
+    dateFrom: isDateValue(requestedDateFrom) ? requestedDateFrom ?? null : null,
+    dateTo: isDateValue(requestedDateTo) ? requestedDateTo ?? null : null,
+  };
+
+  return {
+    filters,
+    availableYears,
+    availableBranches,
+    activePeriodLabel: [
+      formatDateRangeLabel(filters),
+      filters.branch
+        ? availableBranches.find((branch) => branch.id === filters.branch)?.label ?? "Sucursal"
+        : "Todas las sucursales",
+      filters.dateFrom || filters.dateTo
+        ? `${filters.dateFrom ?? "inicio"} a ${filters.dateTo ?? "fin"}`
+        : "Todas las fechas",
+      "Data historica",
+    ].join(" · "),
+  };
+}
+
+async function fetchDailyBranchRows(filters: HistoricalMetricsFilters) {
+  const supabase = await createServerSupabaseClient();
+  const rows: HistoricalDailyBranchRow[] = [];
+  let from = 0;
+
+  while (true) {
+    let query = supabase
+      .from("v_historical_subway_daily_branch")
+      .select(
+        "fecha, anio, semana, dia_semana, sucursal_id, sucursal, venta_total, venta_salon, venta_delivery, clientes_total, clientes_salon, clientes_delivery, ticket_promedio",
+      )
+      .order("fecha", { ascending: true })
+      .order("sucursal", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+
+    query = applySupabaseFilters(query, filters);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const page = (data ?? []) as HistoricalDailyBranchRow[];
+    rows.push(...page);
+
+    if (page.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  return rows;
+}
+
+async function fetchDetailRows(filters: HistoricalMetricsFilters) {
+  const supabase = await createServerSupabaseClient();
+  let dataQuery = supabase
+    .from("v_historical_subway_fact")
+    .select("id, fecha, anio, semana, dia_semana, sucursal_id, sucursal, metrica, valor, source_key, source_file_name, source_sheet_name, created_at")
+    .order("fecha", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(DETAIL_ROW_LIMIT);
+
+  dataQuery = applySupabaseFilters(dataQuery, filters);
+
+  const { data, error } = await dataQuery;
+
+  if (error) throw error;
+
+  const rows = ((data ?? []) as HistoricalFactRow[]).map((row) => ({
+    id: row.id,
+    sucursalId: row.sucursal_id ?? 0,
+    sucursal: row.sucursal ?? "Sin sucursal",
+    fecha: row.fecha ?? "",
+    anio: row.anio ?? 0,
+    semana: row.semana ?? 0,
+    diaSemana: row.dia_semana ?? 0,
+    metrica: row.metrica ?? "",
+    valor: toNumber(row.valor),
+    sourceKey: row.source_key ?? "",
+    sourceFileName: row.source_file_name,
+    sourceSheetName: row.source_sheet_name,
+    createdAt: row.created_at ?? "",
+  }));
+
+  return {
+    rows,
+  };
+}
+
 export async function getHistoricalMetricsDashboard(
   searchParams: HistoricalMetricsSearchParams = {},
 ): Promise<HistoricalMetricsData> {
-  let dbRows: HistoricalMetricDbRow[] = [];
+  let optionRows: HistoricalOptionRow[] = [];
 
   try {
-    dbRows = await fetchHistoricalRows();
+    optionRows = await fetchOptionRows();
   } catch (error) {
-    console.error("[dashboard][historical-metrics] Error al leer historical_metrics_subway", error);
+    console.error("[dashboard][historical-metrics] Error al leer opciones historicas", error);
   }
 
-  const allRows: HistoricalMetricDetailRow[] = dbRows.map((row) => ({
-    id: row.id,
-    sucursalId: row.sucursal_id,
-    sucursal: resolveBranchName(row),
-    fecha: row.fecha,
-    anio: row.anio,
-    semana: row.semana,
-    diaSemana: row.dia_semana,
-    metrica: row.metrica,
-    valor: toNumber(row.valor),
-    sourceKey: row.source_key,
-    sourceFileName: row.source_file_name,
-    sourceSheetName: row.source_sheet_name,
-    createdAt: row.created_at,
-  }));
+  const { filters, availableYears, availableBranches, activePeriodLabel } = resolveFilters(searchParams, optionRows);
+  let dailyRows: HistoricalDailyBranchRow[] = [];
+  let detailRows: HistoricalMetricDetailRow[] = [];
+  let detailRowsTotal = 0;
 
-  const { filters, availableYears, availableBranches, activePeriodLabel } = resolveFilters(searchParams, allRows);
-  const detailRows = allRows.filter((row) => matchesFilters(row, filters));
-  const totalSales = detailRows
-    .filter((row) => isSalesMetric(row.metrica))
-    .reduce((sum, row) => sum + row.valor, 0);
-  const totalClients = detailRows
-    .filter((row) => isClientMetric(row.metrica))
-    .reduce((sum, row) => sum + row.valor, 0);
-  const activeDays = new Set(detailRows.map((row) => row.fecha)).size;
+  try {
+    const [dailyResult, detailResult] = await Promise.all([
+      fetchDailyBranchRows(filters),
+      fetchDetailRows(filters),
+    ]);
+    dailyRows = dailyResult;
+    detailRows = detailResult.rows;
+  } catch (error) {
+    console.error("[dashboard][historical-metrics] Error al leer views historicas", error);
+  }
 
-  const metricSummary = Array.from(
-    detailRows.reduce((map, row) => {
-      const current = map.get(row.metrica) ?? {
-        metrica: row.metrica,
-        total: 0,
-        promedio: 0,
-        filas: 0,
-        sucursalesSet: new Set<number>(),
-        primeraFecha: null as string | null,
-        ultimaFecha: null as string | null,
-      };
+  detailRowsTotal = dailyRows.length * ALL_METRICS.length;
 
-      current.total += row.valor;
-      current.filas += 1;
-      current.sucursalesSet.add(row.sucursalId);
-      current.primeraFecha = minDate(current.primeraFecha, row.fecha);
-      current.ultimaFecha = maxDate(current.ultimaFecha, row.fecha);
-      map.set(row.metrica, current);
-      return map;
-    }, new Map<string, MetricSummaryAgg>()),
-  )
-    .map(([, value]) => ({
-      metrica: value.metrica,
-      total: value.total,
-      promedio: value.filas > 0 ? value.total / value.filas : 0,
-      filas: value.filas,
-      sucursales: value.sucursalesSet.size,
-      primeraFecha: value.primeraFecha,
-      ultimaFecha: value.ultimaFecha,
-    }))
-    .sort((a, b) => b.total - a.total);
+  const totalSales = dailyRows.reduce((sum, row) => sum + toNumber(row.venta_total), 0);
+  const totalClients = dailyRows.reduce((sum, row) => sum + toNumber(row.clientes_total), 0);
+  const activeDays = new Set(dailyRows.map((row) => row.fecha).filter(Boolean)).size;
+
+  const metricSummary = ALL_METRICS.map((metric) => {
+    const rowsWithMetric = dailyRows.filter((row) => getMetricValue(row, metric) !== 0);
+    const total = rowsWithMetric.reduce((sum, row) => sum + getMetricValue(row, metric), 0);
+    const sucursalesSet = new Set(rowsWithMetric.map((row) => row.sucursal_id).filter((id): id is number => id !== null));
+
+    return {
+      metrica: metric,
+      total,
+      promedio: rowsWithMetric.length > 0 ? total / rowsWithMetric.length : 0,
+      filas: rowsWithMetric.length,
+      sucursales: sucursalesSet.size,
+      primeraFecha: rowsWithMetric.reduce<string | null>((current, row) => row.fecha ? minDate(current, row.fecha) : current, null),
+      ultimaFecha: rowsWithMetric.reduce<string | null>((current, row) => row.fecha ? maxDate(current, row.fecha) : current, null),
+    };
+  }).filter((item) => item.filas > 0);
 
   const branchSummary = Array.from(
-    detailRows.reduce((map, row) => {
-      const key = String(row.sucursalId);
+    dailyRows.reduce((map, row) => {
+      const branchId = row.sucursal_id ?? 0;
+      const key = String(branchId);
       const current = map.get(key) ?? {
-        branchId: row.sucursalId,
-        branch: row.sucursal,
+        branchId,
+        branch: row.sucursal ?? "Sin sucursal",
         totalSales: 0,
         totalClients: 0,
         filas: 0,
-        metricasSet: new Set<string>(),
+        metricas: ALL_METRICS.length,
         byMetric: {},
         primeraFecha: null as string | null,
         ultimaFecha: null as string | null,
       };
 
-      if (isSalesMetric(row.metrica)) current.totalSales += row.valor;
-      if (isClientMetric(row.metrica)) current.totalClients += row.valor;
-      current.filas += 1;
-      current.metricasSet.add(row.metrica);
-      current.byMetric[row.metrica] = (current.byMetric[row.metrica] ?? 0) + row.valor;
-      current.primeraFecha = minDate(current.primeraFecha, row.fecha);
-      current.ultimaFecha = maxDate(current.ultimaFecha, row.fecha);
+      current.totalSales += toNumber(row.venta_total);
+      current.totalClients += toNumber(row.clientes_total);
+      current.filas += ALL_METRICS.length;
+      for (const metric of ALL_METRICS) {
+        current.byMetric[metric] = (current.byMetric[metric] ?? 0) + getMetricValue(row, metric);
+      }
+      if (row.fecha) {
+        current.primeraFecha = minDate(current.primeraFecha, row.fecha);
+        current.ultimaFecha = maxDate(current.ultimaFecha, row.fecha);
+      }
       map.set(key, current);
       return map;
-    }, new Map<string, BranchSummaryAgg>()),
+    }, new Map<string, HistoricalBranchSummaryPoint>()),
   )
-    .map(([, value]) => ({
-      branchId: value.branchId,
-      branch: value.branch,
-      totalSales: value.totalSales,
-      totalClients: value.totalClients,
-      filas: value.filas,
-      metricas: value.metricasSet.size,
-      byMetric: value.byMetric,
-      primeraFecha: value.primeraFecha,
-      ultimaFecha: value.ultimaFecha,
-    }))
+    .map(([, value]) => value)
     .sort((a, b) => b.totalSales - a.totalSales);
 
-  const existingMetricKeys = new Set(metricSummary.map((item) => item.metrica));
-  const salesMetricKeys = SALES_METRICS.filter((metric) => existingMetricKeys.has(metric));
-  const clientMetricKeys = CLIENT_METRICS.filter((metric) => existingMetricKeys.has(metric));
+  const salesMetricKeys = SALES_METRICS.filter((metric) => metricSummary.some((item) => item.metrica === metric));
+  const clientMetricKeys = CLIENT_METRICS.filter((metric) => metricSummary.some((item) => item.metrica === metric));
+
+  const yearlyBase = Array.from(
+    dailyRows.reduce((map, row) => {
+      if (!row.anio) return map;
+      const current = map.get(row.anio) ?? {
+        anio: row.anio,
+        label: String(row.anio),
+        ventaTotal: 0,
+        clientesTotal: 0,
+        ticketPromedio: 0,
+        ventaSalon: 0,
+        ventaDelivery: 0,
+        clientesSalon: 0,
+        clientesDelivery: 0,
+        deliveryShare: 0,
+        salesGrowthPct: null as number | null,
+        clientsGrowthPct: null as number | null,
+      };
+
+      current.ventaTotal += toNumber(row.venta_total);
+      current.ventaSalon += toNumber(row.venta_salon);
+      current.ventaDelivery += toNumber(row.venta_delivery);
+      current.clientesTotal += toNumber(row.clientes_total);
+      current.clientesSalon += toNumber(row.clientes_salon);
+      current.clientesDelivery += toNumber(row.clientes_delivery);
+      map.set(row.anio, current);
+      return map;
+    }, new Map<number, HistoricalYearlyPoint>()),
+  )
+    .map(([, value]) => ({
+      ...value,
+      ticketPromedio: safeRatio(value.ventaTotal, value.clientesTotal),
+      deliveryShare: safeRatio(value.ventaDelivery, value.ventaTotal) * 100,
+    }))
+    .sort((a, b) => a.anio - b.anio);
+
+  const yearly = yearlyBase.map((item, index) => {
+    const previous = yearlyBase[index - 1];
+    return {
+      ...item,
+      salesGrowthPct: previous ? safeGrowth(item.ventaTotal, previous.ventaTotal) : null,
+      clientsGrowthPct: previous ? safeGrowth(item.clientesTotal, previous.clientesTotal) : null,
+    };
+  });
+
+  const monthlyPerformance = Array.from(
+    dailyRows.reduce((map, row) => {
+      if (!row.fecha || !row.anio) return map;
+      const month = getDateMonth(row.fecha);
+      if (!month) return map;
+      const key = `${row.anio}-${month.padStart(2, "0")}`;
+      const current = map.get(key) ?? {
+        label: `${getMonthLabel(month, "short")} ${row.anio}`,
+        ventaTotal: 0,
+        clientesTotal: 0,
+        ticketPromedio: 0,
+      };
+
+      current.ventaTotal += toNumber(row.venta_total);
+      current.clientesTotal += toNumber(row.clientes_total);
+      current.ticketPromedio = safeRatio(current.ventaTotal, current.clientesTotal);
+      map.set(key, current);
+      return map;
+    }, new Map<string, HistoricalPeriodPoint>()),
+  )
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([, value]) => value);
+
+  const weekdayLabels = ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo"];
+  const weekdayPerformance = Array.from(
+    dailyRows.reduce((map, row) => {
+      if (!row.dia_semana) return map;
+      const current = map.get(row.dia_semana) ?? {
+        label: weekdayLabels[row.dia_semana - 1] ?? `Dia ${row.dia_semana}`,
+        ventaTotal: 0,
+        clientesTotal: 0,
+        ticketPromedio: 0,
+      };
+
+      current.ventaTotal += toNumber(row.venta_total);
+      current.clientesTotal += toNumber(row.clientes_total);
+      current.ticketPromedio = safeRatio(current.ventaTotal, current.clientesTotal);
+      map.set(row.dia_semana, current);
+      return map;
+    }, new Map<number, HistoricalPeriodPoint>()),
+  )
+    .sort((a, b) => a[0] - b[0])
+    .map(([, value]) => value);
+
+  const branchPerformance = branchSummary.map((branch) => {
+    const ventaTotal = branch.byMetric.VENTA_TOTAL ?? 0;
+    const clientesTotal = branch.byMetric.CLIENTES_TOTAL ?? 0;
+    const ventaDelivery = branch.byMetric.VENTA_DELIVERY ?? 0;
+
+    return {
+      branchId: branch.branchId,
+      branch: branch.branch,
+      ventaTotal,
+      clientesTotal,
+      ticketPromedio: safeRatio(ventaTotal, clientesTotal),
+      ventaDelivery,
+      deliveryShare: safeRatio(ventaDelivery, ventaTotal) * 100,
+    };
+  }).sort((a, b) => b.ventaTotal - a.ventaTotal);
+
+  const getMetricTotal = (metric: string) => metricSummary.find((item) => item.metrica === metric)?.total ?? 0;
+  const salesMix = [
+    { label: "Salon", value: getMetricTotal("VENTA_SALON") },
+    { label: "Delivery", value: getMetricTotal("VENTA_DELIVERY") },
+  ];
+  const clientMix = [
+    { label: "Salon", value: getMetricTotal("CLIENTES_SALON") },
+    { label: "Delivery", value: getMetricTotal("CLIENTES_DELIVERY") },
+  ];
+  const latestYear = yearly.at(-1);
+  const bestBranch = branchPerformance[0];
+  const bestWeekday = [...weekdayPerformance].sort((a, b) => b.ventaTotal - a.ventaTotal)[0];
+  const deliveryShare = safeRatio(salesMix[1]?.value ?? 0, totalSales) * 100;
+  const insights = [
+    latestYear
+      ? `${latestYear.label}: ${latestYear.salesGrowthPct === null ? "sin comparacion contra el anio anterior" : `${latestYear.salesGrowthPct.toFixed(1)}% frente al anio anterior`} en venta total.`
+      : "Sin anios historicos visibles.",
+    bestBranch
+      ? `${bestBranch.branch} lidera la venta historica con ${bestBranch.deliveryShare.toFixed(1)}% por delivery.`
+      : "Sin sucursales historicas visibles.",
+    bestWeekday
+      ? `${bestWeekday.label} concentra la mayor venta historica del filtro.`
+      : "Sin dias historicos visibles.",
+    totalSales > 0
+      ? `Delivery representa ${deliveryShare.toFixed(1)}% de la venta historica visible.`
+      : "Sin venta historica visible.",
+  ];
 
   function buildMonthlyTrend(metricKeys: string[]) {
     return Array.from(
-      detailRows.reduce((map, row) => {
-      const month = getDateMonth(row.fecha);
-      if (!month || !metricKeys.includes(row.metrica)) return map;
+      dailyRows.reduce((map, row) => {
+        if (!row.fecha || !row.anio) return map;
+        const month = getDateMonth(row.fecha);
+        if (!month) return map;
 
-      const key = `${row.anio}-${month.padStart(2, "0")}`;
-      const entry = map.get(key) ?? { label: `${getMonthLabel(month, "short")} ${row.anio}` };
-      entry[row.metrica] = Number(entry[row.metrica] ?? 0) + row.valor;
-      map.set(key, entry);
-      return map;
+        const key = `${row.anio}-${month.padStart(2, "0")}`;
+        const entry = map.get(key) ?? { label: `${getMonthLabel(month, "short")} ${row.anio}` };
+
+        for (const metric of metricKeys) {
+          entry[metric] = Number(entry[metric] ?? 0) + getMetricValue(row, metric);
+        }
+
+        map.set(key, entry);
+        return map;
       }, new Map<string, HistoricalMetricChartPoint>()),
     )
       .sort((a, b) => a[0].localeCompare(b[0]))
@@ -357,7 +634,7 @@ export async function getHistoricalMetricsDashboard(
     kpis: {
       totalSales,
       totalClients,
-      totalRows: detailRows.length,
+      totalRows: detailRowsTotal,
       activeMetrics: metricSummary.length,
       activeBranches: branchSummary.length,
       averageSalesPerDay: activeDays > 0 ? totalSales / activeDays : 0,
@@ -367,10 +644,17 @@ export async function getHistoricalMetricsDashboard(
     clientMetricKeys,
     metricSummary,
     branchSummary,
+    yearly,
+    monthlyPerformance,
+    weekdayPerformance,
+    branchPerformance,
+    salesMix,
+    clientMix,
+    insights,
     monthlySalesTrend: buildMonthlyTrend(salesMetricKeys),
     monthlyClientTrend: buildMonthlyTrend(clientMetricKeys),
-    detailRows: detailRows.slice(0, DETAIL_ROW_LIMIT),
-    detailRowsTotal: detailRows.length,
+    detailRows,
+    detailRowsTotal,
     detailRowsLimit: DETAIL_ROW_LIMIT,
   };
 }
