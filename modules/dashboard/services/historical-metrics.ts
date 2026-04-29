@@ -591,7 +591,7 @@ export async function getHistoricalMetricsDashboard(
   const deliveryShare = safeRatio(salesMix[1]?.value ?? 0, totalSales) * 100;
   const insights = [
     latestYear
-      ? `${latestYear.label}: ${latestYear.salesGrowthPct === null ? "sin comparacion contra el anio anterior" : `${latestYear.salesGrowthPct.toFixed(1)}% frente al anio anterior`} en venta total.`
+      ? `${latestYear.label}: ${latestYear.salesGrowthPct === null ? "sin comparacion contra el anio anterior" : `${latestYear.salesGrowthPct.toFixed(1)}% frente al año anterior`} en venta total.`
       : "Sin anios historicos visibles.",
     bestBranch
       ? `${bestBranch.branch} lidera la venta historica con ${bestBranch.deliveryShare.toFixed(1)}% por delivery.`

@@ -23,16 +23,17 @@ const navigation = [
     label: "Dashboard",
     icon: LayoutDashboard,
   },
+   {
+    href: "/dashboard/subway/historico?branch=&dateFrom=&dateTo=2025-12-31",
+    label: "Historico",
+    icon: History,
+  },
   {
     href: "/dashboard/imports",
     label: "Importaciones",
     icon: UploadCloud,
   },
-  {
-    href: "/dashboard/subway/historico",
-    label: "Historico",
-    icon: History,
-  },
+ 
 ];
 
 const sidebarShellClass =

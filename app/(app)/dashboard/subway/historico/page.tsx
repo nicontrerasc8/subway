@@ -102,6 +102,8 @@ function HistoricalFilterForm({ dashboard }: { dashboard: HistoricalMetricsData 
           id="historical-date-to"
           name="dateTo"
           type="date"
+          max="2025-12-31"
+
           defaultValue={dashboard.filters.dateTo ?? ""}
           className="flex h-10 w-full rounded-lg border border-border bg-input px-3 py-2 text-sm shadow-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
         />
