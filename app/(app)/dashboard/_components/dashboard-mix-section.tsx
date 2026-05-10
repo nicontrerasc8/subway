@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { DashboardExportButtons } from "@/app/(app)/dashboard/_components/dashboard-export-buttons";
 import {
   DashboardBranchesMultiBarChart,
   DashboardMixChart,
@@ -206,6 +207,16 @@ export function DashboardMixSection({ mix }: { mix: DashboardMixData }) {
           eyebrow="Mix"
           title="Categorías, productos y composición"
           description="Peso de categorías, productos líderes y composición comercial."
+        />
+        <DashboardExportButtons
+          section="mix"
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          options={[
+            { label: "Categorías Excel", view: "categories" },
+            { label: "Productos Excel", view: "products" },
+            { label: "Diario Excel", view: "daily" },
+          ]}
         />
         <div className="grid gap-3 rounded-2xl border bg-card p-3 sm:grid-cols-[minmax(150px,1fr)_minmax(150px,1fr)_auto] sm:items-end">
           <div className="space-y-1.5">

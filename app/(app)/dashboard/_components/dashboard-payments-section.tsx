@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { DashboardExportButtons } from "@/app/(app)/dashboard/_components/dashboard-export-buttons";
 import { DashboardBranchesMetricView, DashboardMixChart } from "@/app/(app)/dashboard/_components/dashboard-overview-charts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatNumber } from "@/lib/utils";
@@ -219,6 +220,16 @@ export function DashboardPaymentsSection({ payments }: { payments: DashboardPaym
           eyebrow="Pagos"
           title="Medios de pago y ticket"
           description="Importe cobrado, operaciones, ticket promedio y mix de formas de pago."
+        />
+        <DashboardExportButtons
+          section="payments"
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          options={[
+            { label: "Mix Excel", view: "mix" },
+            { label: "Ranking Excel", view: "ranking" },
+            { label: "Diario Excel", view: "daily" },
+          ]}
         />
         <div className="grid gap-3 rounded-2xl border bg-card p-3 sm:grid-cols-[minmax(150px,1fr)_minmax(150px,1fr)_auto] sm:items-end">
           <div className="space-y-1.5">

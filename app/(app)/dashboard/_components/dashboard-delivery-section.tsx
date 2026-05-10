@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { DashboardExportButtons } from "@/app/(app)/dashboard/_components/dashboard-export-buttons";
 import { DashboardBranchesMetricView } from "@/app/(app)/dashboard/_components/dashboard-overview-charts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatNumber } from "@/lib/utils";
@@ -245,6 +246,16 @@ export function DashboardDeliverySection({ payments }: { payments: DashboardPaym
           eyebrow="Delivery"
           title="Comparativo anual por app"
           description={`Ventas, transacciones y ticket promedio de las apps presentes entre ${previousYear ?? "AA"} y ${currentYear ?? "actual"}.`}
+        />
+        <DashboardExportButtons
+          section="delivery"
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          options={[
+            { label: "Ventas Excel", view: "sales" },
+            { label: "Txs Excel", view: "transactions" },
+            { label: "Ticket Excel", view: "ticket" },
+          ]}
         />
         <div className="grid gap-3 rounded-2xl border bg-card p-3 sm:grid-cols-[minmax(150px,1fr)_minmax(150px,1fr)_auto] sm:items-end">
           <div className="space-y-1.5">

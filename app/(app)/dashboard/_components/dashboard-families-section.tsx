@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { DashboardExportButtons } from "@/app/(app)/dashboard/_components/dashboard-export-buttons";
 import { DashboardBranchesMetricView } from "@/app/(app)/dashboard/_components/dashboard-overview-charts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatNumber } from "@/lib/utils";
@@ -122,6 +123,16 @@ export function DashboardFamiliesSection({
           eyebrow="Familias"
           title="Mix tipo Excel"
           description="Categorías de la base de datos comparadas año contra año y con participación sobre unidades."
+        />
+        <DashboardExportButtons
+          section="families"
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          options={[
+            { label: "Comparativo Excel", view: "comparison" },
+            { label: "Participación Excel", view: "share" },
+            { label: "Diario Excel", view: "daily" },
+          ]}
         />
         <div className="grid gap-3 rounded-2xl border bg-card p-3 sm:grid-cols-[minmax(150px,1fr)_minmax(150px,1fr)_auto] sm:items-end">
           <div className="space-y-1.5">

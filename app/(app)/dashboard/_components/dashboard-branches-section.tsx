@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { DashboardExportButtons } from "@/app/(app)/dashboard/_components/dashboard-export-buttons";
 import { DashboardBranchesMetricView } from "@/app/(app)/dashboard/_components/dashboard-overview-charts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatNumber } from "@/lib/utils";
@@ -202,6 +203,16 @@ export function DashboardBranchesSection({ branches }: { branches: DashboardBran
           eyebrow="Sucursales"
           title="Rendimiento por sede"
           description="Comparativo de ventas, ticket, volumen y variedad entre sucursales."
+        />
+        <DashboardExportButtons
+          section="branches"
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          options={[
+            { label: "Ranking Excel", view: "ranking" },
+            { label: "Tendencias Excel", view: "trends" },
+            { label: "Diario Excel", view: "daily" },
+          ]}
         />
         <div className="grid gap-3 rounded-2xl border bg-card p-3 sm:grid-cols-[minmax(150px,1fr)_minmax(150px,1fr)_auto] sm:items-end">
           <div className="space-y-1.5">
