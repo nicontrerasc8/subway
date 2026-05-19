@@ -415,6 +415,122 @@ function DashboardBranchesDataTable({
   );
 }
 
+function DashboardBranchesMobileBars({
+  data,
+  keys,
+  valueFormatter,
+  stacked = false,
+}: {
+  data: DashboardBranchesChartPoint[];
+  keys: string[];
+  valueFormatter: (value: number) => string;
+  stacked?: boolean;
+}) {
+  const maxValue = Math.max(
+    1,
+    ...data.flatMap((item) =>
+      stacked
+        ? [keys.reduce((sum, key) => sum + Number(item[key] ?? 0), 0)]
+        : keys.map((key) => Number(item[key] ?? 0)),
+    ),
+  );
+
+  if (!data.length) {
+    return (
+      <div className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+        No hay datos visibles con estos filtros.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {data.map((item) => {
+        const stackedTotal = keys.reduce((sum, key) => sum + Number(item[key] ?? 0), 0);
+
+        return (
+          <div key={String(item.label)} className="rounded-2xl border bg-card p-3">
+            <p className="mb-3 text-sm font-semibold text-foreground">{item.label}</p>
+
+            {stacked ? (
+              <>
+                <div className="flex h-7 overflow-hidden rounded-full bg-muted">
+                  {keys.map((key, index) => {
+                    const value = Number(item[key] ?? 0);
+                    const width = stackedTotal > 0 ? (value / stackedTotal) * 100 : 0;
+
+                    return (
+                      <div
+                        key={`${item.label}-${key}`}
+                        className="min-w-0"
+                        style={{
+                          width: `${width}%`,
+                          backgroundColor: getSeriesColor(key, index),
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+                <div className="mt-3 grid gap-2">
+                  {keys.map((key, index) => {
+                    const value = Number(item[key] ?? 0);
+
+                    return (
+                      <div key={`${item.label}-${key}-legend`} className="flex items-center justify-between gap-3 text-sm">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span
+                            className="size-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: getSeriesColor(key, index) }}
+                          />
+                          <span className="truncate">{key}</span>
+                        </span>
+                        <span className="font-semibold tabular-nums">{valueFormatter(value)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <div className="space-y-3">
+                {keys.map((key, index) => {
+                  const value = Number(item[key] ?? 0);
+                  const width = Math.max(2, (value / maxValue) * 100);
+
+                  return (
+                    <div key={`${item.label}-${key}`} className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-3 text-xs">
+                        <span className="flex min-w-0 items-center gap-2 text-muted-foreground">
+                          <span
+                            className="size-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: getSeriesColor(key, index) }}
+                          />
+                          <span className="truncate">{key}</span>
+                        </span>
+                        <span className="font-semibold text-foreground tabular-nums">
+                          {valueFormatter(value)}
+                        </span>
+                      </div>
+                      <div className="h-3 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${width}%`,
+                            backgroundColor: getSeriesColor(key, index),
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function DashboardBranchesMetricView({
   data,
   keys,
@@ -441,7 +557,13 @@ export function DashboardBranchesMetricView({
   const valueFormatter = valueFormat === "percent" ? formatPercentValue : valueFormat === "number" ? formatNumber : formatCurrency;
 
   return (
-    <Tabs defaultValue="chart" className="w-full">
+    <>
+      <div className="space-y-4 lg:hidden">
+        <DashboardBranchesDataTable data={data} keys={keys} valueFormatter={valueFormatter} labelHeader={labelHeader} />
+        <DashboardBranchesMobileBars data={data} keys={keys} valueFormatter={valueFormatter} stacked={stackedBars} />
+      </div>
+
+      <Tabs defaultValue="chart" className="hidden w-full lg:block">
       <div className="mb-3 flex justify-end">
         <TabsList className="h-9 rounded-xl">
           <TabsTrigger value="chart" className="rounded-lg px-3 py-1 text-xs">
@@ -471,7 +593,8 @@ export function DashboardBranchesMetricView({
       <TabsContent value="table" className="mt-0">
         <DashboardBranchesDataTable data={data} keys={keys} valueFormatter={valueFormatter} labelHeader={labelHeader} />
       </TabsContent>
-    </Tabs>
+      </Tabs>
+    </>
   );
 }
 
@@ -687,6 +810,7 @@ export function DashboardProductComparisonView({
   const [selectedReference, setSelectedReference] = useState(data[0]?.referencia ?? "");
   const [selectedYears, setSelectedYears] = useState(yearKeys);
   const [selectedBranches, setSelectedBranches] = useState(branchKeys);
+  const [activeView, setActiveView] = useState<"chart" | "table">("table");
   const selectedProduct = data.find((product) => product.referencia === selectedReference) ?? data[0];
   const activeYearKeys = selectedYears.filter((key) => yearKeys.includes(key));
   const activeBranchKeys = selectedBranches.filter((key) => branchKeys.includes(key));
@@ -703,8 +827,26 @@ export function DashboardProductComparisonView({
     return <p className="text-sm text-muted-foreground">{emptyMessage}</p>;
   }
 
+  const selectedProductChartData: DashboardBranchesChartPoint[] = activeBranchKeys.length
+    ? activeBranchKeys.map((branch) => ({
+        label: branch,
+        ...activeYearKeys.reduce<Record<string, number>>((values, year) => {
+          values[year] = selectedProduct.byBranchYear[`${branch}__${year}`] ?? 0;
+          return values;
+        }, {}),
+      }))
+    : [
+        activeYearKeys.reduce<DashboardBranchesChartPoint>(
+          (values, year) => {
+            values[year] = selectedProduct.byYear[year] ?? 0;
+            return values;
+          },
+          { label: "Todas las sucursales" },
+        ),
+      ];
+
   return (
-    <Tabs defaultValue="chart" className="w-full">
+    <Tabs value={activeView} onValueChange={(value) => setActiveView(value as "chart" | "table")} className="w-full">
       <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(220px,0.75fr)_minmax(260px,1fr)_auto] lg:items-end">
         <p className="text-sm text-muted-foreground">
           {description}
@@ -798,13 +940,27 @@ export function DashboardProductComparisonView({
             </TabsList>
           </div>
           <TabsContent value="years" className="mt-0">
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
+            <div className="lg:hidden">
+              <DashboardBranchesMobileBars
+                data={selectedProductChartData}
+                keys={activeYearKeys}
+                valueFormatter={formatCurrency}
+              />
+            </div>
+            <div className="hidden gap-4 lg:grid xl:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
               <ProductComparisonChart product={selectedProduct} yearKeys={activeYearKeys} branchKeys={activeBranchKeys} />
               <ProductComparisonPie product={selectedProduct} yearKeys={activeYearKeys} branchKeys={activeBranchKeys} />
             </div>
           </TabsContent>
           <TabsContent value="branches" className="mt-0">
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
+            <div className="lg:hidden">
+              <DashboardBranchesMobileBars
+                data={selectedProductChartData}
+                keys={activeYearKeys}
+                valueFormatter={formatCurrency}
+              />
+            </div>
+            <div className="hidden gap-4 lg:grid xl:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
               <ProductComparisonChart product={selectedProduct} yearKeys={activeYearKeys} branchKeys={activeBranchKeys} />
               <ProductComparisonPie product={selectedProduct} yearKeys={activeYearKeys} branchKeys={activeBranchKeys} />
             </div>
