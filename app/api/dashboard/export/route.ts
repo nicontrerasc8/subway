@@ -72,6 +72,135 @@ function getYear(value: string) {
   return value.slice(0, 4);
 }
 
+function getMonth(value: string) {
+  return value.slice(5, 7);
+}
+
+function getIsoWeek(value: string) {
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const day = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+
+  return `${date.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
+function getDeliveryApp(value: string) {
+  return getDeliveryPlatform(value) ?? "No delivery";
+}
+
+function buildFullSalesRows(rows: Awaited<ReturnType<typeof getDashboardBranches>>["dailyRows"]) {
+  return rows.map((row) => ({
+    Fecha: row.fecha,
+    "Año": getYear(row.fecha),
+    Mes: getMonth(row.fecha),
+    Semana: getIsoWeek(row.fecha),
+    "Sucursal ID": row.branchId,
+    Sucursal: row.branch,
+    "Venta total": row.sales,
+    "Venta salón": row.salonSales,
+    "Venta delivery": row.deliverySales,
+    "% delivery": row.sales > 0 ? row.deliverySales / row.sales : 0,
+    Unidades: row.units,
+    Transacciones: row.operations,
+    "Ticket promedio": row.operations > 0 ? row.sales / row.operations : 0,
+    "Productos distintos": row.products,
+  }));
+}
+
+function buildFullPaymentRows(rows: Awaited<ReturnType<typeof getDashboardPayments>>["ticketDailyRows"]) {
+  return rows.map((row) => ({
+    Fecha: row.fecha,
+    "Año": getYear(row.fecha),
+    Mes: getMonth(row.fecha),
+    Semana: getIsoWeek(row.fecha),
+    "Sucursal ID": row.branchId,
+    Sucursal: row.branch,
+    Importe: row.amount,
+    Transacciones: row.operations,
+    "Ticket promedio": row.operations > 0 ? row.amount / row.operations : 0,
+    "Importe salón": row.salonAmount,
+    "Importe delivery": row.deliveryAmount,
+    "% delivery": row.amount > 0 ? row.deliveryAmount / row.amount : 0,
+    "Txs salón": row.salonOperations,
+    "Txs delivery": row.deliveryOperations,
+    "Ticket salón": row.salonOperations > 0 ? row.salonAmount / row.salonOperations : 0,
+    "Ticket delivery": row.deliveryOperations > 0 ? row.deliveryAmount / row.deliveryOperations : 0,
+  }));
+}
+
+function buildFullDeliveryRows(rows: Awaited<ReturnType<typeof getDashboardPayments>>["paymentDailyRows"]) {
+  return rows
+    .map((row) => ({
+      Fecha: row.fecha,
+      "Año": getYear(row.fecha),
+      Mes: getMonth(row.fecha),
+      Semana: getIsoWeek(row.fecha),
+      "Sucursal ID": row.branchId,
+      Sucursal: row.branch,
+      App: getDeliveryApp(row.method),
+      "Forma de pago original": row.method,
+      Importe: row.amount,
+      Transacciones: row.operations,
+      "Ticket promedio": row.operations > 0 ? row.amount / row.operations : 0,
+    }))
+    .filter((row) => row.App !== "No delivery");
+}
+
+function buildFullMixRows(mix: Awaited<ReturnType<typeof getDashboardMix>>) {
+  const categoryRows = mix.categoryDailyRows.map((row) => ({
+    Nivel: "Categoría",
+    Fecha: row.fecha,
+    "Año": getYear(row.fecha),
+    Mes: getMonth(row.fecha),
+    Semana: getIsoWeek(row.fecha),
+    "Sucursal ID": row.branchId,
+    Sucursal: row.branch,
+    Referencia: null,
+    Producto: null,
+    Categoría: row.category,
+    Ventas: row.sales,
+    Unidades: row.units,
+  }));
+  const productRows = mix.productDailyRows.map((row) => ({
+    Nivel: "Producto",
+    Fecha: row.fecha,
+    "Año": getYear(row.fecha),
+    Mes: getMonth(row.fecha),
+    Semana: getIsoWeek(row.fecha),
+    "Sucursal ID": row.branchId,
+    Sucursal: row.branch,
+    Referencia: row.reference,
+    Producto: row.product,
+    Categoría: row.category,
+    Ventas: row.sales,
+    Unidades: row.units,
+  }));
+
+  return [...categoryRows, ...productRows];
+}
+
+async function buildFullDashboardWorkbook() {
+  const [branches, payments, mix] = await Promise.all([
+    getDashboardBranches(),
+    getDashboardPayments(),
+    getDashboardMix(),
+  ]);
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Subway dashboard";
+  workbook.created = new Date();
+
+  addWorksheet(workbook, "Ventas totales", buildFullSalesRows(branches.dailyRows));
+  addWorksheet(workbook, "Ticket y transacciones", buildFullPaymentRows(payments.ticketDailyRows));
+  addWorksheet(workbook, "Delivery por app", buildFullDeliveryRows(payments.paymentDailyRows));
+  addWorksheet(workbook, "Mix comercial", buildFullMixRows(mix));
+
+  return workbook;
+}
+
 function summarizeByBranch(rows: Array<{ branchId: number | null; branch: string; sales: number; units: number; operations: number; products: number }>) {
   return Array.from(
     rows.reduce((map, row) => {
@@ -321,6 +450,20 @@ export async function GET(request: Request) {
 
   if (!canAccessSubwayDashboards(user.role)) {
     return Response.json({ error: "No autorizado." }, { status: 403 });
+  }
+
+  if (getParam(request, "section") === "all") {
+    const workbook = await buildFullDashboardWorkbook();
+    const buffer = await workbook.xlsx.writeBuffer();
+
+    return new Response(buffer, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": 'attachment; filename="subway-dashboard-completo-ia.xlsx"',
+        "Cache-Control": "no-store",
+      },
+    });
   }
 
   const { workbook, section, view } = await buildWorkbook(request);
