@@ -7,14 +7,14 @@ import { AccountingImportDetailView } from "@/modules/imports/components/account
 import {
   getAccountingImportDetail,
 } from "@/modules/imports/services/accounting-import-service";
-import { canAccessImports } from "@/modules/imports/services/import-service";
+import { canManageAccountingImports } from "@/modules/imports/services/import-service";
 
 export default async function AccountingImportDetailPage(
   props: { params: Promise<{ importId: string }> },
 ) {
   const user = await getCurrentUser();
 
-  if (!user || !canAccessImports(user.role)) {
+  if (!user || !canManageAccountingImports(user.role)) {
     forbidden();
   }
 

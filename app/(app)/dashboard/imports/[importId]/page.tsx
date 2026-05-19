@@ -2,16 +2,17 @@ import Link from "next/link";
 import { forbidden } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { canManageImports } from "@/lib/auth/roles";
 import { getCurrentUser } from "@/lib/auth/session";
 import { ImportDetailView } from "@/modules/imports/components/import-detail-view";
-import { canAccessImports, getImportDetail } from "@/modules/imports/services/import-service";
+import { getImportDetail } from "@/modules/imports/services/import-service";
 
 export default async function ImportDetailPage(
   props: { params: Promise<{ importId: string }> },
 ) {
   const user = await getCurrentUser();
 
-  if (!user || !canAccessImports(user.role)) {
+  if (!user || !canManageImports(user.role)) {
     forbidden();
   }
 

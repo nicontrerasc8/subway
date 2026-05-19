@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "assign-branch-roles": "node scripts/assign-branch-roles.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

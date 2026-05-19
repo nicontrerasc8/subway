@@ -35,8 +35,6 @@ export default async function SubwaySalesPage({ searchParams }: PageProps) {
             action="/dashboard/subway/ventas"
             filters={dashboard.filters}
             availableYears={dashboard.availableYears}
-            branch={dashboard.filters.branch}
-            branches={dashboard.availableBranches}
             layout="inline"
           />
         </CardContent>
@@ -125,7 +123,7 @@ export default async function SubwaySalesPage({ searchParams }: PageProps) {
                       {formatNumber(branch.units)} unidades · {formatNumber(branch.operations)} operaciones
                     </p>
                   </div>
-                  <div className="grid gap-1 text-right sm:grid-cols-3 sm:gap-6">
+                  <div className="grid gap-1 text-right sm:grid-cols-2 sm:gap-6">
                     <div>
                       <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Ventas</p>
                       <p className="font-semibold">{formatCurrency(branch.sales)}</p>
@@ -134,10 +132,7 @@ export default async function SubwaySalesPage({ searchParams }: PageProps) {
                       <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Ticket</p>
                       <p className="font-semibold">{formatCurrency(branch.averageTicket)}</p>
                     </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">SKUs por día</p>
-                      <p className="font-semibold">{formatNumber(branch.averageProducts)}</p>
-                    </div>
+                
                   </div>
                 </div>
               </div>

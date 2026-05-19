@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { canManageImports } from "@/lib/auth/roles";
 import { getCurrentUser } from "@/lib/auth/session";
 import {
   deleteImportFactRow,
@@ -17,6 +18,10 @@ export async function PATCH(
 
     if (!currentUser) {
       return NextResponse.json({ error: "Sesion no valida." }, { status: 401 });
+    }
+
+    if (!canManageImports(currentUser.role)) {
+      return NextResponse.json({ error: "No autorizado." }, { status: 403 });
     }
 
     const { importId, rowId } = await params;
@@ -116,6 +121,10 @@ export async function DELETE(
 
     if (!currentUser) {
       return NextResponse.json({ error: "Sesion no valida." }, { status: 401 });
+    }
+
+    if (!canManageImports(currentUser.role)) {
+      return NextResponse.json({ error: "No autorizado." }, { status: 403 });
     }
 
     const { importId, rowId } = await params;

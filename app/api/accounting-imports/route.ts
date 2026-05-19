@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth/session";
 import { importYearSchema } from "@/lib/validators/imports";
-import { canAccessImports } from "@/modules/imports/services/import-service";
+import { canManageAccountingImports } from "@/modules/imports/services/import-service";
 import {
   createAccountingImportFromUpload,
   saveAccountingImportFromPreview,
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Sesion no valida." }, { status: 401 });
     }
 
-    if (!canAccessImports(currentUser.role)) {
+    if (!canManageAccountingImports(currentUser.role)) {
       return NextResponse.json({ error: "No autorizado." }, { status: 403 });
     }
 

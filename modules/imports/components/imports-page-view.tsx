@@ -2,7 +2,13 @@
 
 import { useEffect, useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { LoaderCircle, Trash2, UploadCloud } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  LoaderCircle,
+  Trash2,
+  UploadCloud,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +18,6 @@ import { Input } from "@/components/ui/input";
 import type { ImportRecord } from "@/lib/types/database";
 import { formatDateOnly } from "@/lib/utils";
 import type { SubwayImportSourceKey } from "@/modules/imports/parser/excel";
-import type { SubwayBranch } from "@/modules/imports/services/import-service";
 
 const statusVariantMap = {
   pending: "warning",
@@ -23,11 +28,27 @@ const statusVariantMap = {
 
 interface UploadResponse {
   error?: string;
+  replacedImportCount?: number;
 }
+
+type SubwayBranch = {
+  id: number;
+  nombre: string;
+};
+
+type ExistingSubwayImportSlot = {
+  id: string;
+  fecha: string | null;
+  source_key: string | null;
+  sucursal_id: number;
+  file_name: string;
+  uploaded_at: string;
+  status: ImportRecord["status"];
+};
 
 const sourceLabelMap: Record<string, string> = {
   "ax-commercial": "Ventas",
-  "ax_forma_pedido": "Forma de pedido",
+  ax_forma_pedido: "Forma de pedido",
 };
 
 function getTodayInputValue() {
@@ -45,12 +66,14 @@ function ImportUploadCard({
   sourceKey,
   accentClassName,
   branches,
+  existingImports,
 }: {
   title: string;
   description: string;
   sourceKey: SubwayImportSourceKey;
   accentClassName: string;
   branches: SubwayBranch[];
+  existingImports: ExistingSubwayImportSlot[];
 }) {
   const router = useRouter();
   const fileInputId = useId();
@@ -61,6 +84,14 @@ function ImportUploadCard({
   );
   const [isPending, startTransition] = useTransition();
 
+  const existingImport = existingImports.find((item) => {
+    return (
+      item.fecha === fecha &&
+      item.source_key === sourceKey &&
+      String(item.sucursal_id) === sucursalId
+    );
+  });
+
   function handleSubmit() {
     if (!file) {
       toast.error("Selecciona un archivo Excel antes de continuar.");
@@ -70,6 +101,14 @@ function ImportUploadCard({
     if (!sucursalId) {
       toast.error("Selecciona una sucursal antes de continuar.");
       return;
+    }
+
+    if (existingImport) {
+      const confirmed = window.confirm(
+        "Ya existe una carga para esta fecha, sucursal y tipo de Excel. Si continúas, se reemplazará la carga anterior.",
+      );
+
+      if (!confirmed) return;
     }
 
     startTransition(async () => {
@@ -92,10 +131,16 @@ function ImportUploadCard({
 
         setFile(null);
         router.refresh();
-        toast.success(`${title} importado correctamente.`);
+        toast.success(
+          payload.replacedImportCount
+            ? `${title} importado correctamente. Se reemplazó la carga anterior.`
+            : `${title} importado correctamente.`,
+        );
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : "Error durante la importacion.",
+          error instanceof Error
+            ? error.message
+            : "Error durante la importación.",
         );
       }
     });
@@ -109,14 +154,19 @@ function ImportUploadCard({
           Importar
         </p>
         <CardTitle className="mt-2">{title}</CardTitle>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-          {description}
-        </p>
+        {description ? (
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+            {description}
+          </p>
+        ) : null}
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
           <div className="grid gap-2">
-            <label htmlFor={`${fileInputId}-fecha`} className="text-sm font-medium text-foreground">
+            <label
+              htmlFor={`${fileInputId}-fecha`}
+              className="text-sm font-medium text-foreground"
+            >
               Fecha de venta
             </label>
             <Input
@@ -125,13 +175,13 @@ function ImportUploadCard({
               value={fecha}
               onChange={(event) => setFecha(event.target.value)}
             />
-            <p className="text-xs text-muted-foreground">
-              Esta fecha se guarda en `imports_subway.fecha`.
-            </p>
           </div>
 
           <div className="grid gap-2">
-            <label htmlFor={`${fileInputId}-branch`} className="text-sm font-medium text-foreground">
+            <label
+              htmlFor={`${fileInputId}-branch`}
+              className="text-sm font-medium text-foreground"
+            >
               Sucursal
             </label>
             <select
@@ -150,9 +200,6 @@ function ImportUploadCard({
                 <option value="">Sin sucursales</option>
               )}
             </select>
-            <p className="text-xs text-muted-foreground">
-              Cada importacion queda asociada a una sucursal concreta.
-            </p>
           </div>
         </div>
 
@@ -171,13 +218,13 @@ function ImportUploadCard({
               </p>
               <div className="inline-flex min-h-9 max-w-full items-center rounded-lg border border-dashed border-border bg-background/80 px-3 py-2 text-sm text-foreground shadow-sm">
                 <span className="truncate">
-                  {file ? file.name : "Ningun archivo seleccionado"}
+                  {file ? file.name : "Ningún archivo seleccionado"}
                 </span>
               </div>
             </div>
             <Button
               type="button"
-              className="h-11 rounded-lg border-border/70 bg-background px-4 shadow-sm text-black"
+              className="h-11 rounded-lg border-border/70 bg-background px-4 text-black shadow-sm"
               onClick={() => document.getElementById(fileInputId)?.click()}
             >
               <UploadCloud className="size-4" />
@@ -185,6 +232,34 @@ function ImportUploadCard({
             </Button>
           </div>
         </div>
+
+        {existingImport ? (
+          <div className="space-y-2">
+            <div className="flex gap-3 rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900">
+              <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <p className="font-semibold">
+                  Ya se subió todo OK para esta fecha y sucursal.
+                </p>
+                <p className="mt-1">
+                  Última carga: {existingImport.file_name} · Estado:{" "}
+                  {existingImport.status}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <p className="font-semibold">
+                  Si procesas otro archivo, se reemplazará la carga anterior.
+                </p>
+                <p className="mt-1">
+                  Esto aplica solo para esta fecha, sucursal y tipo de Excel.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <Button
           onClick={handleSubmit}
@@ -196,7 +271,7 @@ function ImportUploadCard({
           ) : (
             <UploadCloud className="size-4" />
           )}
-          Procesar importacion
+          Procesar importación
         </Button>
       </CardContent>
     </Card>
@@ -213,7 +288,7 @@ function ImportHistoryCard({ imports }: { imports: ImportRecord[] }) {
 
   async function handleDeleteImport(importId: string) {
     const confirmed = window.confirm(
-      "Se eliminara la importacion completa. Esta accion no se puede deshacer.",
+      "Se eliminará la importación completa. Esta acción no se puede deshacer.",
     );
 
     if (!confirmed) return;
@@ -227,14 +302,18 @@ function ImportHistoryCard({ imports }: { imports: ImportRecord[] }) {
       const payload = (await response.json()) as { error?: string };
 
       if (!response.ok) {
-        throw new Error(payload.error ?? "No se pudo eliminar la importacion.");
+        throw new Error(payload.error ?? "No se pudo eliminar la importación.");
       }
 
-      setVisibleImports((current) => current.filter((item) => item.id !== importId));
-      toast.success("Importacion eliminada.");
+      setVisibleImports((current) =>
+        current.filter((item) => item.id !== importId),
+      );
+      toast.success("Importación eliminada.");
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "No se pudo eliminar la importacion.",
+        error instanceof Error
+          ? error.message
+          : "No se pudo eliminar la importación.",
       );
     } finally {
       setDeletingImportId(null);
@@ -258,7 +337,7 @@ function ImportHistoryCard({ imports }: { imports: ImportRecord[] }) {
                 <th className="px-4 py-3">Fecha</th>
                 <th className="px-4 py-3">Estado</th>
                 <th className="px-4 py-3">Filas</th>
-                <th className="px-4 py-3">Validas</th>
+                <th className="px-4 py-3">Válidas</th>
                 <th className="px-4 py-3">Errores</th>
                 <th className="px-4 py-3 text-right">Acciones</th>
               </tr>
@@ -269,17 +348,28 @@ function ImportHistoryCard({ imports }: { imports: ImportRecord[] }) {
                   <tr key={item.id} className="border-b last:border-b-0">
                     <td className="px-4 py-3 font-medium">{item.file_name}</td>
                     <td className="px-4 py-3">
-                      <Badge variant={item.source_key === "ax_forma_pedido" ? "warning" : "success"}>
-                        {sourceLabelMap[item.source_key ?? "ax-commercial"] ?? item.source_key}
+                      <Badge
+                        variant={
+                          item.source_key === "ax_forma_pedido"
+                            ? "warning"
+                            : "success"
+                        }
+                      >
+                        {sourceLabelMap[item.source_key ?? "ax-commercial"] ??
+                          item.source_key}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3">{item.sucursal ?? `Sucursal ${item.sucursal_id}`}</td>
+                    <td className="px-4 py-3">
+                      {item.sucursal ?? `Sucursal ${item.sucursal_id}`}
+                    </td>
                     <td className="px-4 py-3">
                       {item.uploaded_by_profile?.full_name ??
                         item.uploaded_by_profile?.email ??
                         item.uploaded_by}
                     </td>
-                    <td className="px-4 py-3">{formatDateOnly(item.fecha ?? item.uploaded_at)}</td>
+                    <td className="px-4 py-3">
+                      {formatDateOnly(item.fecha ?? item.uploaded_at)}
+                    </td>
                     <td className="px-4 py-3">
                       <Badge variant={statusVariantMap[item.status]}>
                         {item.status}
@@ -311,7 +401,7 @@ function ImportHistoryCard({ imports }: { imports: ImportRecord[] }) {
                     colSpan={10}
                     className="px-4 py-10 text-center text-sm text-muted-foreground"
                   >
-                    No hay importaciones registradas todavia.
+                    No hay importaciones registradas todavía.
                   </td>
                 </tr>
               )}
@@ -326,9 +416,13 @@ function ImportHistoryCard({ imports }: { imports: ImportRecord[] }) {
 export function ImportsPageView({
   imports,
   branches,
+  existingImports,
+  canViewHistory,
 }: {
   imports: ImportRecord[];
   branches: SubwayBranch[];
+  existingImports: ExistingSubwayImportSlot[];
+  canViewHistory: boolean;
 }) {
   return (
     <div className="space-y-8">
@@ -341,7 +435,8 @@ export function ImportsPageView({
             Flujo de carga
           </h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
-            Sube archivos de ventas o pagos y guárdalos directamente en el esquema normalizado de Subway.
+            Sube archivos de ventas o pagos y guárdalos directamente en el
+            esquema normalizado de Subway.
           </p>
         </div>
       </section>
@@ -353,16 +448,19 @@ export function ImportsPageView({
           sourceKey="ax-commercial"
           accentClassName="bg-[#ffc20a]"
           branches={branches}
+          existingImports={existingImports}
         />
         <ImportUploadCard
           title="Subir Excel de forma de pedido"
-          description="Lee forma de pago en A, importe en I y numero de operaciones en O para poblar sales_payment."
+          description=""
           sourceKey="ax_forma_pedido"
           accentClassName="bg-[#008938]"
           branches={branches}
+          existingImports={existingImports}
         />
       </div>
-      <ImportHistoryCard imports={imports} />
+
+      {canViewHistory ? <ImportHistoryCard imports={imports} /> : null}
     </div>
   );
 }

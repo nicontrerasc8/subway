@@ -21,7 +21,7 @@ import {
   parseImportAudit,
   type ImportAudit,
 } from "@/modules/imports/services/import-audit";
-import { importAccessRoles } from "@/modules/imports/services/import-service";
+import { accountingImportAccessRoles } from "@/modules/imports/services/import-service";
 
 type RecentAccountingImportRow = ImportRecord & {
   data?: unknown;
@@ -522,7 +522,7 @@ export async function saveAccountingImportFromPreview(
 }
 
 export async function listRecentAccountingImports() {
-  await requireRoleAccess([...importAccessRoles]);
+  await requireRoleAccess([...accountingImportAccessRoles]);
 
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
@@ -539,7 +539,7 @@ export async function listRecentAccountingImports() {
 }
 
 export async function deleteAccountingImport(importId: string) {
-  await requireRoleAccess([...importAccessRoles]);
+  await requireRoleAccess([...accountingImportAccessRoles]);
 
   const supabase = await createServerSupabaseClient();
   const { error } = await supabase
@@ -556,7 +556,7 @@ export async function deleteAccountingImport(importId: string) {
 }
 
 export async function getAccountingImportDetail(importId: string) {
-  await requireRoleAccess([...importAccessRoles]);
+  await requireRoleAccess([...accountingImportAccessRoles]);
 
   const supabase = await createServerSupabaseClient();
   const { data: importRow, error: importError } = await supabase
@@ -584,7 +584,7 @@ export async function updateAccountingImportMetadata(
   importId: string,
   input: { anio: number },
 ) {
-  await requireRoleAccess([...importAccessRoles]);
+  await requireRoleAccess([...accountingImportAccessRoles]);
 
   const parsed = updateImportSchema.parse({
     anio: input.anio,
@@ -619,7 +619,7 @@ export async function updateAccountingImportRow(
     periodo: string | null;
   },
 ) {
-  await requireRoleAccess([...importAccessRoles]);
+  await requireRoleAccess([...accountingImportAccessRoles]);
 
   const parsed = updateAccountingRowSchema.parse({
     linea: normalizeOptionalText(input.linea),
@@ -687,7 +687,7 @@ export async function updateAccountingImportRow(
 }
 
 export async function deleteAccountingImportRow(importId: string, rowId: number) {
-  await requireRoleAccess([...importAccessRoles]);
+  await requireRoleAccess([...accountingImportAccessRoles]);
 
   const importRow = await getAccountingImportRowForEdit(importId);
   const importData = parseAccountingImportData(importRow.data);

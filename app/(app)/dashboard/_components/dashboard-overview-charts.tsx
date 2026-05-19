@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Pie, PieChart, Cell, Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Pie, PieChart, Cell, Bar, BarChart, CartesianGrid, LabelList, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -56,6 +56,20 @@ function getKnownLabelColor(label: unknown) {
 
 function getSeriesColor(label: unknown, index: number) {
   return getKnownLabelColor(label) ?? COLORS[index % COLORS.length];
+}
+
+function formatCompactCurrency(value: number) {
+  return new Intl.NumberFormat("es-PE", {
+    compactDisplay: "short",
+    maximumFractionDigits: 1,
+    notation: "compact",
+    style: "currency",
+    currency: "PEN",
+  }).format(value);
+}
+
+function formatPercentValue(value: number) {
+  return `${value.toFixed(1)}%`;
 }
 
 function CurrencyTooltip({
@@ -188,42 +202,165 @@ export function DashboardBranchesMultiLineChart({
     </ResponsiveContainer>
   );
 }
-
 export function DashboardBranchesMultiBarChart({
   data,
   keys,
   valueFormat = "currency",
+  showValueLabels = false,
+  largeText = false,
+  layout = "vertical",
+  stacked = false,
+  colorMode = "entry",
 }: {
   data: DashboardBranchesChartPoint[];
   keys: string[];
-  valueFormat?: "currency" | "number";
+  valueFormat?: "currency" | "number" | "percent";
+  showValueLabels?: boolean;
+  largeText?: boolean;
+  layout?: "vertical" | "horizontal";
+  stacked?: boolean;
+  colorMode?: "entry" | "series";
 }) {
-  const valueFormatter = valueFormat === "number" ? formatNumber : formatCurrency;
+  const valueFormatter = valueFormat === "percent" ? formatPercentValue : valueFormat === "number" ? formatNumber : formatCurrency;
+  const labelFormatter = valueFormat === "percent" ? formatPercentValue : valueFormat === "number" ? formatNumber : formatCompactCurrency;
+  
+  // --- DISEÑO AGRESIVO DE TAMAÑOS PARA MÁXIMA COMODIDAD ---
+  const isHorizontal = layout === "horizontal";
+  const axisFontSize = largeText ? 20 : 14; // Más grande y legible
+  
+  // Clases de Tailwind más modernas y espaciadas para las etiquetas internas
+  const labelFontClass = stacked
+    ? "fill-white text-[14px] font-bold"
+    : largeText
+      ? "fill-foreground text-[18px] font-bold tracking-tight"
+      : "fill-muted-foreground text-[13px] font-semibold";
+
+  const legendStyle = largeText
+    ? { fontSize: 20, fontWeight: 500, paddingBottom: "24px" }
+    : { fontSize: 14, fontWeight: 500, paddingBottom: "12px" };
+
+  // Dinamismo en la altura para que respire si hay muchos datos
+  const chartHeight = isHorizontal 
+    ? Math.max(stacked ? 620 : 550, data.length * (largeText ? 96 : stacked ? 86 : 80)) 
+    : (largeText ? 450 : 360);
 
   return (
-    <ResponsiveContainer width="100%" height={280}>
-      <BarChart data={data} margin={{ top: 16, right: 16, left: 4, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-        <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-        <YAxis tickFormatter={(value) => valueFormatter(Number(value))} width={88} tick={{ fontSize: 12 }} />
-        <Tooltip content={<ValueTooltip valueFormatter={valueFormatter} />} />
-        <Legend align="right" iconType="circle" verticalAlign="top" height={28} wrapperStyle={{ fontSize: 12 }} />
-        {keys.map((key, index) => (
+    <ResponsiveContainer width="100%" height={chartHeight}>
+      <BarChart
+        data={data}
+        layout={isHorizontal ? "vertical" : "horizontal"}
+        // Espaciados generosos para evitar el efecto de "amontonamiento"
+        barCategoryGap={isHorizontal ? "24%" : "16%"}
+        barGap={isHorizontal ? 6 : 4}
+        barSize={isHorizontal ? (largeText ? 24 : 18) : (largeText ? 32 : 24)}
+        margin={{
+          top: isHorizontal ? 20 : (showValueLabels ? 48 : 24),
+          right: showValueLabels && isHorizontal ? (largeText ? 110 : stacked ? 36 : 88) : 24,
+          left: isHorizontal ? (largeText ? 160 : stacked ? 138 : 110) : 12,
+          bottom: isHorizontal ? 12 : (largeText ? 32 : 20),
+        }}
+      >
+        {/* Guías de fondo más sutiles (opacidad baja para no ensuciar) */}
+        <CartesianGrid strokeDasharray="4 4" vertical={false} opacity={0.4} />
+        
+        {isHorizontal ? (
+          <>
+            <XAxis 
+              type="number" 
+              tickFormatter={(value) => valueFormatter(Number(value))} 
+              tick={{ fontSize: axisFontSize, fontWeight: 500 }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis 
+              type="category" 
+              dataKey="label" 
+              width={largeText ? 150 : stacked ? 128 : 100} 
+              tick={{ fontSize: stacked ? 15 : axisFontSize, fontWeight: 600 }}
+              axisLine={false}
+              tickLine={false}
+            />
+          </>
+        ) : (
+          <>
+            <XAxis 
+              dataKey="label" 
+              tick={{ fontSize: axisFontSize, fontWeight: 600 }}
+              axisLine={false}
+              tickLine={false}
+              dy={10} // Baja un poco el texto para que no pegue con el eje
+            />
+            <YAxis 
+              tickFormatter={(value) => valueFormatter(Number(value))} 
+              width={largeText ? 130 : 90} 
+              tick={{ fontSize: axisFontSize, fontWeight: 500 }}
+              axisLine={false}
+              tickLine={false}
+            />
+          </>
+        )}
+        
+        <Tooltip 
+          content={<ValueTooltip valueFormatter={valueFormatter} />}
+          cursor={{ fill: 'rgba(0, 0, 0, 0.03)' }} // Efecto hover sutil detrás de las barras
+        />
+        
+        <Legend 
+          align="right" 
+          iconType="circle" 
+          iconSize={largeText ? 12 : 8}
+          verticalAlign="top" 
+          height={largeText ? 56 : 36} 
+          wrapperStyle={legendStyle} 
+        />
+        
+        {keys.map((key, index) => {
+          const radius: [number, number, number, number] = stacked
+            ? isHorizontal
+              ? index === 0
+                ? [8, 0, 0, 8]
+                : index === keys.length - 1
+                  ? [0, 8, 8, 0]
+                  : [0, 0, 0, 0]
+              : index === keys.length - 1
+                ? [8, 8, 0, 0]
+                : [0, 0, 0, 0]
+            : isHorizontal
+              ? [0, 8, 8, 0]
+              : [8, 8, 0, 0];
+
+          return (
           <Bar
             key={key}
             dataKey={key}
             fill={getSeriesColor(key, index)}
-            fillOpacity={keys.length > 1 && index === 0 ? 0.62 : 1}
-            radius={[6, 6, 0, 0]}
+            fillOpacity={!stacked && keys.length > 1 && index === 0 ? 0.65 : 1}
+            radius={radius}
+            stackId={stacked ? "total" : undefined}
           >
-            {data.map((entry) => (
+            {stacked || colorMode === "series" ? null : data.map((entry) => (
               <Cell
                 key={`${key}-${entry.label}`}
                 fill={getSeriesColor(entry.label, index)}
               />
             ))}
+            {showValueLabels ? (
+              <LabelList
+                dataKey={key}
+                // Ajuste de posición y separación (offset)
+                position={stacked ? "center" : isHorizontal ? "right" : "top"}
+                offset={largeText ? 12 : 8}
+                formatter={(value: unknown) => {
+                  const numericValue = Number(value ?? 0);
+                  if (stacked && numericValue < 4) return "";
+                  return labelFormatter(numericValue);
+                }}
+                className={labelFontClass}
+              />
+            ) : null}
           </Bar>
-        ))}
+          );
+        })}
       </BarChart>
     </ResponsiveContainer>
   );
@@ -284,14 +421,24 @@ export function DashboardBranchesMetricView({
   chart,
   valueFormat = "currency",
   labelHeader = "Fecha",
+  showValueLabels = false,
+  largeText = false,
+  barLayout = "vertical",
+  stackedBars = false,
+  barColorMode = "entry",
 }: {
   data: DashboardBranchesChartPoint[];
   keys: string[];
   chart: "line" | "bar";
-  valueFormat?: "currency" | "number";
+  valueFormat?: "currency" | "number" | "percent";
   labelHeader?: string;
+  showValueLabels?: boolean;
+  largeText?: boolean;
+  barLayout?: "vertical" | "horizontal";
+  stackedBars?: boolean;
+  barColorMode?: "entry" | "series";
 }) {
-  const valueFormatter = valueFormat === "number" ? formatNumber : formatCurrency;
+  const valueFormatter = valueFormat === "percent" ? formatPercentValue : valueFormat === "number" ? formatNumber : formatCurrency;
 
   return (
     <Tabs defaultValue="chart" className="w-full">
@@ -309,7 +456,16 @@ export function DashboardBranchesMetricView({
         {chart === "line" ? (
           <DashboardBranchesMultiLineChart data={data} keys={keys} />
         ) : (
-          <DashboardBranchesMultiBarChart data={data} keys={keys} valueFormat={valueFormat} />
+          <DashboardBranchesMultiBarChart
+            data={data}
+            keys={keys}
+            valueFormat={valueFormat}
+            showValueLabels={showValueLabels}
+            largeText={largeText}
+            layout={barLayout}
+            stacked={stackedBars}
+            colorMode={barColorMode}
+          />
         )}
       </TabsContent>
       <TabsContent value="table" className="mt-0">
@@ -326,9 +482,9 @@ export function DashboardSimpleBarChart({
 }: {
   data: DashboardOverviewPoint[];
   name?: string;
-  valueFormat?: "currency" | "number";
+  valueFormat?: "currency" | "number" | "percent";
 }) {
-  const valueFormatter = valueFormat === "number" ? formatNumber : formatCurrency;
+  const valueFormatter = valueFormat === "percent" ? formatPercentValue : valueFormat === "number" ? formatNumber : formatCurrency;
 
   return (
     <ResponsiveContainer width="100%" height={280}>
@@ -516,10 +672,16 @@ export function DashboardProductComparisonView({
   data,
   yearKeys,
   branchKeys,
+  description = "Todos los productos con el filtro activo de fecha y sucursal.",
+  searchPlaceholder = "Buscar producto",
+  emptyMessage = "No hay productos visibles con estos filtros.",
 }: {
   data: DashboardMixProductComparisonPoint[];
   yearKeys: string[];
   branchKeys: string[];
+  description?: string;
+  searchPlaceholder?: string;
+  emptyMessage?: string;
 }) {
   const [query, setQuery] = useState("");
   const [selectedReference, setSelectedReference] = useState(data[0]?.referencia ?? "");
@@ -538,20 +700,20 @@ export function DashboardProductComparisonView({
   }, [data, query]);
 
   if (!selectedProduct) {
-    return <p className="text-sm text-muted-foreground">No hay productos visibles con estos filtros.</p>;
+    return <p className="text-sm text-muted-foreground">{emptyMessage}</p>;
   }
 
   return (
     <Tabs defaultValue="chart" className="w-full">
       <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(220px,0.75fr)_minmax(260px,1fr)_auto] lg:items-end">
         <p className="text-sm text-muted-foreground">
-          Todos los productos con el filtro activo de fecha y sucursal.
+          {description}
         </p>
         <div className="grid gap-2 sm:grid-cols-[minmax(160px,0.7fr)_minmax(220px,1fr)]">
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar producto"
+            placeholder={searchPlaceholder}
             className="h-9 rounded-lg border border-border bg-input px-3 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
           />
           <select
@@ -663,10 +825,10 @@ export function DashboardProductComparisonView({
             </TabsList>
           </div>
           <TabsContent value="years" className="mt-0">
-            <ProductComparisonTable data={data} yearKeys={activeYearKeys} branchKeys={activeBranchKeys} />
+            <ProductComparisonTable data={[selectedProduct]} yearKeys={activeYearKeys} branchKeys={activeBranchKeys} />
           </TabsContent>
           <TabsContent value="branches" className="mt-0">
-            <ProductComparisonTable data={data} yearKeys={activeYearKeys} branchKeys={activeBranchKeys} />
+            <ProductComparisonTable data={[selectedProduct]} yearKeys={activeYearKeys} branchKeys={activeBranchKeys} />
           </TabsContent>
         </Tabs>
       </TabsContent>

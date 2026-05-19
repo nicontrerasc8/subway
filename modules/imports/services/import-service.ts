@@ -2,8 +2,14 @@ import "server-only";
 
 import { revalidatePath } from "next/cache";
 
-import { requireRoleAccess } from "@/lib/auth/authorization";
-import { canManageImports, importManagerRoles } from "@/lib/auth/roles";
+import { requireCurrentUser } from "@/lib/auth/authorization";
+import {
+  branchImportRoles,
+  canImportForBranch,
+  canManageImports,
+  getRoleSucursalId,
+  importManagerRoles,
+} from "@/lib/auth/roles";
 import type { CurrentUser } from "@/lib/auth/session";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { AppRole, ImportFactRow, ImportRecord } from "@/lib/types/database";
@@ -20,9 +26,8 @@ import {
   type ImportAudit,
 } from "@/modules/imports/services/import-audit";
 
-export const importAccessRoles = importManagerRoles;
-
-type ImportAccessRole = (typeof importAccessRoles)[number];
+export const importAccessRoles = [...importManagerRoles, ...branchImportRoles] as const;
+export const accountingImportAccessRoles = importManagerRoles;
 type SupabaseServerClient = Awaited<ReturnType<typeof createServerSupabaseClient>>;
 
 type ImportJsonRow = {
@@ -73,7 +78,43 @@ function normalizeImportRecord(row: RecentImportRow): ImportRecord {
 }
 
 export function canAccessImports(role: AppRole) {
+  return canManageImports(role) || canImportForBranch(role);
+}
+
+export function canManageAccountingImports(role: AppRole) {
   return canManageImports(role);
+}
+
+async function requireImportAccess() {
+  const user = await requireCurrentUser();
+
+  if (!canAccessImports(user.role)) {
+    throw new Error("No tienes permisos para ejecutar esta accion.");
+  }
+
+  return user;
+}
+
+async function requireImportManagement() {
+  const user = await requireCurrentUser();
+
+  if (!canManageImports(user.role)) {
+    throw new Error("No tienes permisos para revisar o modificar importaciones.");
+  }
+
+  return user;
+}
+
+function getAllowedSucursalId(user: CurrentUser) {
+  return getRoleSucursalId(user.role);
+}
+
+function assertCanUseSucursal(user: CurrentUser, sucursalId: number | null | undefined) {
+  const allowedSucursalId = getAllowedSucursalId(user);
+
+  if (allowedSucursalId !== null && sucursalId !== allowedSucursalId) {
+    throw new Error("Este usuario solo puede cargar informacion de su sucursal.");
+  }
 }
 
 function normalizeOptionalText(value: string | null | undefined) {
@@ -524,11 +565,11 @@ async function getProfilesById(userIds: string[]) {
   );
 }
 
-async function getImportRowForEdit(importId: string) {
+async function getImportRowForEdit(importId: string, user: CurrentUser) {
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
     .from("imports_subway")
-    .select("id, fecha, data")
+    .select("id, fecha, sucursal_id, data")
     .eq("id", importId)
     .single();
 
@@ -536,17 +577,27 @@ async function getImportRowForEdit(importId: string) {
     throw new Error("No se encontro la importacion.");
   }
 
-  return data as { id: string; fecha: string | null; data?: unknown };
+  const row = data as { id: string; fecha: string | null; sucursal_id: number | null; data?: unknown };
+  assertCanUseSucursal(user, row.sucursal_id);
+
+  return row;
 }
 
 export async function listSubwayBranches() {
-  await requireRoleAccess([...importAccessRoles] as ImportAccessRole[]);
+  const user = await requireImportAccess();
+  const allowedSucursalId = getAllowedSucursalId(user);
 
   const supabase = await createServerSupabaseClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("sucursales_subway")
     .select("id, nombre")
     .order("nombre", { ascending: true });
+
+  if (allowedSucursalId !== null) {
+    query = query.eq("id", allowedSucursalId);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error("[imports][service] Error al listar sucursales", error);
@@ -579,6 +630,8 @@ export async function createImportFromUpload(
     throw new Error("Debes seleccionar una sucursal valida.");
   }
 
+  assertCanUseSucursal(currentUser, sucursalId);
+
   const parsed = await parseAxWorkbook(file, sourceKey);
   const storagePath = buildImportSourceRef(file.name, currentUser.id);
   const importData = buildImportData(parsed, sourceKey);
@@ -601,6 +654,12 @@ export async function createImportFromUpload(
   console.log("nulos_por_campo", importData.audit.nullFieldCounts);
   console.table(buildImportDebugSummary(importData, 10));
   console.groupEnd();
+
+  const replacedImportCount = await replaceExistingImportsForSlot(supabase, {
+    fecha,
+    sourceKey,
+    sucursalId,
+  });
 
   const { data: importRow, error: importError } = await supabase
     .from("imports_subway")
@@ -667,6 +726,7 @@ export async function createImportFromUpload(
     id: importId,
     fileName: file.name,
     importYear,
+    replacedImportCount,
     sheetName: parsed.sheetName,
     columns: parsed.columns,
     previewRows: buildPreviewRows(importId, importData),
@@ -676,17 +736,67 @@ export async function createImportFromUpload(
   };
 }
 
+async function replaceExistingImportsForSlot(
+  supabase: SupabaseServerClient,
+  {
+    fecha,
+    sourceKey,
+    sucursalId,
+  }: { fecha: string; sourceKey: SubwayImportSourceKey; sucursalId: number },
+) {
+  const { data, error } = await supabase
+    .from("imports_subway")
+    .select("id")
+    .eq("fecha", fecha)
+    .eq("source_key", sourceKey)
+    .eq("sucursal_id", sucursalId);
+
+  if (error) {
+    console.error("[imports][service] Error al buscar importaciones previas", error);
+    throw new Error("No se pudo verificar si ya existia una importacion para esa fecha y sucursal.");
+  }
+
+  const ids = ((data ?? []) as Array<{ id: string }>).map((row) => row.id);
+  if (!ids.length) return 0;
+
+  const [{ error: productError }, { error: paymentError }] = await Promise.all([
+    supabase.from("sales_product").delete().in("import_id", ids),
+    supabase.from("sales_payment").delete().in("import_id", ids),
+  ]);
+
+  if (productError || paymentError) {
+    console.error("[imports][service] Error al limpiar importaciones previas", { productError, paymentError });
+    throw new Error("No se pudieron limpiar las importaciones previas para reemplazarlas.");
+  }
+
+  const { error: deleteError } = await supabase.from("imports_subway").delete().in("id", ids);
+
+  if (deleteError) {
+    console.error("[imports][service] Error al borrar importaciones previas", deleteError);
+    throw new Error("No se pudieron reemplazar las importaciones previas.");
+  }
+
+  return ids.length;
+}
+
 export async function listRecentImports() {
-  await requireRoleAccess([...importAccessRoles] as ImportAccessRole[]);
+  const user = await requireImportManagement();
+  const allowedSucursalId = getAllowedSucursalId(user);
 
   const supabase = await createServerSupabaseClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("imports_subway")
     .select(
       "id, file_name, storage_path, anio, fecha, source_key, sucursal_id, uploaded_by, uploaded_at, status, total_rows, valid_rows, error_rows, notes, sucursales_subway(nombre)",
     )
     .order("uploaded_at", { ascending: false })
     .limit(20);
+
+  if (allowedSucursalId !== null) {
+    query = query.eq("sucursal_id", allowedSucursalId);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error("[imports][service] Error al listar importaciones", error);
@@ -704,8 +814,43 @@ export async function listRecentImports() {
   );
 }
 
+export type ExistingSubwayImportSlot = {
+  id: string;
+  fecha: string | null;
+  source_key: string | null;
+  sucursal_id: number;
+  file_name: string;
+  uploaded_at: string;
+  status: ImportRecord["status"];
+};
+
+export async function listExistingImportSlots(): Promise<ExistingSubwayImportSlot[]> {
+  const user = await requireImportAccess();
+  const allowedSucursalId = getAllowedSucursalId(user);
+
+  const supabase = await createServerSupabaseClient();
+  let query = supabase
+    .from("imports_subway")
+    .select("id, fecha, source_key, sucursal_id, file_name, uploaded_at, status")
+    .order("uploaded_at", { ascending: false })
+    .limit(500);
+
+  if (allowedSucursalId !== null) {
+    query = query.eq("sucursal_id", allowedSucursalId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("[imports][service] Error al listar slots de importacion", error);
+    return [];
+  }
+
+  return ((data ?? []) as ExistingSubwayImportSlot[]).filter((row) => row.fecha && row.source_key);
+}
+
 export async function getImportDetail(importId: string) {
-  await requireRoleAccess([...importAccessRoles] as ImportAccessRole[]);
+  const user = await requireImportManagement();
 
   const supabase = await createServerSupabaseClient();
   const { data: importRow, error: importError } = await supabase
@@ -722,6 +867,7 @@ export async function getImportDetail(importId: string) {
 
   const importData = parseImportData(importId, (importRow as { data?: unknown }).data);
   const row = importRow as unknown as Omit<RecentImportRow, "profiles">;
+  assertCanUseSucursal(user, row.sucursal_id);
   const profiles = await getProfilesById([row.uploaded_by]);
 
   return {
@@ -738,8 +884,9 @@ export async function updateImportMetadata(
   importId: string,
   input: { anio: number },
 ) {
-  await requireRoleAccess([...importAccessRoles] as ImportAccessRole[]);
+  const user = await requireImportManagement();
   const parsed = updateImportSchema.parse(input);
+  await getImportRowForEdit(importId, user);
 
   const supabase = await createServerSupabaseClient();
   const { error } = await supabase
@@ -756,7 +903,8 @@ export async function updateImportMetadata(
 }
 
 export async function deleteImport(importId: string) {
-  await requireRoleAccess([...importAccessRoles] as ImportAccessRole[]);
+  const user = await requireImportManagement();
+  await getImportRowForEdit(importId, user);
 
   const supabase = await createServerSupabaseClient();
   const [{ error: productError }, { error: paymentError }] = await Promise.all([
@@ -783,9 +931,9 @@ export async function deleteImport(importId: string) {
 }
 
 export async function deleteImportFactRow(importId: string, rowId: number) {
-  await requireRoleAccess([...importAccessRoles] as ImportAccessRole[]);
+  const user = await requireImportManagement();
 
-  const importRow = await getImportRowForEdit(importId);
+  const importRow = await getImportRowForEdit(importId, user);
   const importData = parseImportData(importId, importRow.data);
   const nextRows = importData.rows.filter((row) => row.row_number !== rowId);
   const nextAudit = buildImportAudit({
@@ -868,7 +1016,7 @@ export async function updateImportFactRow(
     observaciones: string | null;
   },
 ) {
-  await requireRoleAccess([...importAccessRoles] as ImportAccessRole[]);
+  const user = await requireImportManagement();
 
   const parsed = updateFactRowSchema.parse({
     anio: input.anio,
@@ -909,7 +1057,7 @@ export async function updateImportFactRow(
     observaciones: normalizeOptionalText(input.observaciones),
   });
 
-  const importRow = await getImportRowForEdit(importId);
+  const importRow = await getImportRowForEdit(importId, user);
   const importData = parseImportData(importId, importRow.data);
 
   const nextRows = importData.rows.map((row) => {

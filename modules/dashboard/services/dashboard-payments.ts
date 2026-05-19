@@ -42,6 +42,20 @@ type PaymentDetailRow = {
   operaciones: number | string | null;
 };
 
+type HistoricalDailyBranchRow = {
+  fecha: string | null;
+  anio: number | null;
+  sucursal_id: number | null;
+  sucursal: string | null;
+  venta_total: number | string | null;
+  venta_salon: number | string | null;
+  venta_delivery: number | string | null;
+  clientes_total: number | string | null;
+  clientes_salon: number | string | null;
+  clientes_delivery: number | string | null;
+  ticket_promedio: number | string | null;
+};
+
 export type DashboardPaymentsFilters = DashboardDateRangeFilters & {
   branch: string | null;
 };
@@ -82,6 +96,10 @@ export type DashboardPaymentTicketDailyPoint = {
   branch: string;
   amount: number;
   operations: number;
+  salonAmount: number;
+  deliveryAmount: number;
+  salonOperations: number;
+  deliveryOperations: number;
 };
 
 export type DashboardPaymentMethodDailyPoint = {
@@ -116,6 +134,23 @@ function toNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function normalizePaymentMethod(value: string | null) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .trim();
+}
+
+function getPaymentChannel(value: string | null): "salon" | "delivery" | "other" {
+  const normalized = normalizePaymentMethod(value);
+  if (normalized.includes("PEYA") || normalized.includes("PEDIDOS") || normalized.includes("RAPPI") || normalized.includes("DIDI") || normalized.includes("DELIVERY")) {
+    return "delivery";
+  }
+  if (normalized.includes("VISA") || normalized.includes("EFECTIVO") || normalized.includes("SALON")) return "salon";
+  return "other";
+}
+
 async function fetchAllRows<T>(view: string, columns: string) {
   const supabase = await createServerSupabaseClient();
   const rows: T[] = [];
@@ -137,6 +172,98 @@ async function fetchAllRows<T>(view: string, columns: string) {
   }
 
   return rows;
+}
+
+function isHistoricalYear(value: string | null) {
+  const year = getDateYear(value);
+  return year !== null && Number(year) >= 2023 && Number(year) <= 2025;
+}
+
+function isOperationalYear(value: string | null) {
+  const year = getDateYear(value);
+  return year !== null && Number(year) >= 2026;
+}
+
+function getBranchPaymentKey(row: { fecha: string | null; sucursal_id: number | null; sucursal: string | null }) {
+  if (!row.fecha) return "";
+  const branchKey = row.sucursal_id === null ? row.sucursal ?? "Sin sucursal" : String(row.sucursal_id);
+  return `${row.fecha}__${branchKey}`;
+}
+
+function buildOperationalPaymentChannels(rows: PaymentMethodDailyRow[]) {
+  return rows.reduce((map, row) => {
+    if (!row.fecha || !isOperationalYear(row.fecha)) return map;
+
+    const key = getBranchPaymentKey(row);
+    const current = map.get(key) ?? {
+      salonAmount: 0,
+      deliveryAmount: 0,
+      salonOperations: 0,
+      deliveryOperations: 0,
+    };
+    const channel = getPaymentChannel(row.forma_pago);
+
+    if (channel === "salon") {
+      current.salonAmount += toNumber(row.importe);
+      current.salonOperations += toNumber(row.operaciones);
+    }
+    if (channel === "delivery") {
+      current.deliveryAmount += toNumber(row.importe);
+      current.deliveryOperations += toNumber(row.operaciones);
+    }
+    map.set(key, current);
+    return map;
+  }, new Map<string, { salonAmount: number; deliveryAmount: number; salonOperations: number; deliveryOperations: number }>());
+}
+
+function mapHistoricalTicketRows(rows: HistoricalDailyBranchRow[]): TicketDailyBranchRow[] {
+  return rows
+    .filter((row) => isHistoricalYear(row.fecha))
+    .map((row) => ({
+      fecha: row.fecha,
+      sucursal_id: row.sucursal_id,
+      sucursal: row.sucursal,
+      importe_total: row.venta_total,
+      operaciones_totales: row.clientes_total,
+      ticket_promedio: row.ticket_promedio,
+    }));
+}
+
+function mapHistoricalPaymentRows(rows: HistoricalDailyBranchRow[]): PaymentMethodDailyRow[] {
+  return rows
+    .filter((row) => isHistoricalYear(row.fecha))
+    .flatMap((row) => [
+      {
+        fecha: row.fecha,
+        sucursal_id: row.sucursal_id,
+        sucursal: row.sucursal,
+        forma_pago: "Salon historico",
+        importe: row.venta_salon,
+        operaciones: row.clientes_salon,
+      },
+      {
+        fecha: row.fecha,
+        sucursal_id: row.sucursal_id,
+        sucursal: row.sucursal,
+        forma_pago: "Delivery historico",
+        importe: row.venta_delivery,
+        operaciones: row.clientes_delivery,
+      },
+    ]);
+}
+
+function buildHistoricalPaymentChannels(rows: HistoricalDailyBranchRow[]) {
+  return rows.reduce((map, row) => {
+    if (!row.fecha || !isHistoricalYear(row.fecha)) return map;
+
+    map.set(getBranchPaymentKey(row), {
+      salonAmount: toNumber(row.venta_salon),
+      deliveryAmount: toNumber(row.venta_delivery),
+      salonOperations: toNumber(row.clientes_salon),
+      deliveryOperations: toNumber(row.clientes_delivery),
+    });
+    return map;
+  }, new Map<string, { salonAmount: number; deliveryAmount: number; salonOperations: number; deliveryOperations: number }>());
 }
 
 async function fetchPaymentRows() {
@@ -226,13 +353,27 @@ function getDayComparisonKey(fecha: string | null) {
 export async function getDashboardPayments(
   searchParams: DashboardPaymentsSearchParams = {},
 ): Promise<DashboardPaymentsData> {
-  const [ticketRows, paymentRows] = await Promise.all([
+  const [operationalTicketRows, operationalPaymentRows, historicalRows] = await Promise.all([
     fetchAllRows<TicketDailyBranchRow>(
       "v_kpi_ticket_daily_branch",
       "fecha, sucursal_id, sucursal, importe_total, operaciones_totales, ticket_promedio",
     ),
     fetchPaymentRows(),
+    fetchAllRows<HistoricalDailyBranchRow>(
+      "v_historical_subway_daily_branch",
+      "fecha, anio, sucursal_id, sucursal, venta_total, venta_salon, venta_delivery, clientes_total, clientes_salon, clientes_delivery, ticket_promedio",
+    ),
   ]);
+  const operationalChannels = buildOperationalPaymentChannels(operationalPaymentRows);
+  const historicalChannels = buildHistoricalPaymentChannels(historicalRows);
+  const ticketRows = [
+    ...mapHistoricalTicketRows(historicalRows),
+    ...operationalTicketRows.filter((row) => isOperationalYear(row.fecha)),
+  ];
+  const paymentRows = [
+    ...mapHistoricalPaymentRows(historicalRows),
+    ...operationalPaymentRows.filter((row) => isOperationalYear(row.fecha)),
+  ];
 
   const { filters, availableYears, availableMonths, availableBranches, activePeriodLabel } = resolveFilters(searchParams, ticketRows);
 
@@ -315,13 +456,21 @@ export async function getDashboardPayments(
   const totalOperations = filteredTicketRows.reduce((sum, row) => sum + toNumber(row.operaciones_totales), 0);
   const ticketDailyRows = filteredTicketRows
     .filter((row) => row.fecha)
-    .map((row) => ({
-      fecha: row.fecha ?? "",
-      branchId: row.sucursal_id,
-      branch: row.sucursal ?? "Sin sucursal",
-      amount: toNumber(row.importe_total),
-      operations: toNumber(row.operaciones_totales),
-    }));
+    .map((row) => {
+      const channels = historicalChannels.get(getBranchPaymentKey(row)) ?? operationalChannels.get(getBranchPaymentKey(row));
+
+      return {
+        fecha: row.fecha ?? "",
+        branchId: row.sucursal_id,
+        branch: row.sucursal ?? "Sin sucursal",
+        amount: toNumber(row.importe_total),
+        operations: toNumber(row.operaciones_totales),
+        salonAmount: channels?.salonAmount ?? 0,
+        deliveryAmount: channels?.deliveryAmount ?? 0,
+        salonOperations: channels?.salonOperations ?? 0,
+        deliveryOperations: channels?.deliveryOperations ?? 0,
+      };
+    });
   const paymentDailyRows = filteredPaymentRows
     .filter((row) => row.fecha)
     .map((row) => ({

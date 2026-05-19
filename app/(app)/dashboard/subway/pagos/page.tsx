@@ -36,8 +36,6 @@ export default async function SubwayPaymentsPage({ searchParams }: PageProps) {
             action="/dashboard/subway/pagos"
             filters={dashboard.filters}
             availableYears={dashboard.availableYears}
-            branch={dashboard.filters.branch}
-            branches={dashboard.availableBranches}
             layout="inline"
           />
         </CardContent>

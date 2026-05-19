@@ -56,7 +56,7 @@ export async function loginAction(
     return { error: "No se pudo resolver el perfil del usuario autenticado." };
   }
 
-  redirect(getDefaultDashboardPath());
+  redirect(getDefaultDashboardPath(user.role));
 }
 
 export async function logoutAction() {

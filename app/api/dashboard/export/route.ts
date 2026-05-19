@@ -1,5 +1,7 @@
 import ExcelJS from "exceljs";
 
+import { canAccessSubwayDashboards } from "@/lib/auth/roles";
+import { getCurrentUser } from "@/lib/auth/session";
 import { getDashboardCommercialInsights } from "@/modules/dashboard/services/dashboard-commercial-insights";
 import { getDashboardBranches } from "@/modules/dashboard/services/dashboard-branches";
 import { getDashboardMix } from "@/modules/dashboard/services/dashboard-mix";
@@ -311,6 +313,16 @@ async function buildWorkbook(request: Request) {
 }
 
 export async function GET(request: Request) {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    return Response.json({ error: "Sesion no valida." }, { status: 401 });
+  }
+
+  if (!canAccessSubwayDashboards(user.role)) {
+    return Response.json({ error: "No autorizado." }, { status: 403 });
+  }
+
   const { workbook, section, view } = await buildWorkbook(request);
   const buffer = await workbook.xlsx.writeBuffer();
 

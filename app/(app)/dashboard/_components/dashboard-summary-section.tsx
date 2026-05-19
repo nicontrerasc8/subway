@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 
-import { DashboardExportButtons } from "@/app/(app)/dashboard/_components/dashboard-export-buttons";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import type { DashboardOverviewData, DashboardOverviewKpis } from "@/modules/dashboard/services/dashboard-overview";
@@ -94,16 +93,6 @@ export function DashboardSummarySection({ overview }: { overview: DashboardOverv
           eyebrow="Inicio"
           title="Resumen ejecutivo"
           description="Indicadores principales de venta, volumen, ticket y cuadre para el periodo filtrado."
-        />
-        <DashboardExportButtons
-          section="summary"
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          options={[
-            { label: "KPIs Excel", view: "kpis" },
-            { label: "Diario Excel", view: "daily" },
-            { label: "Cuadre Excel", view: "reconciliation" },
-          ]}
         />
         <div className="grid gap-3 rounded-2xl border bg-card p-3 sm:grid-cols-[minmax(150px,1fr)_minmax(150px,1fr)_auto] sm:items-end">
           <div className="space-y-1.5">

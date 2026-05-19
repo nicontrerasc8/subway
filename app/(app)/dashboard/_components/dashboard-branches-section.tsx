@@ -2,37 +2,17 @@
 
 import { useMemo, useState } from "react";
 
-import { DashboardExportButtons } from "@/app/(app)/dashboard/_components/dashboard-export-buttons";
 import { DashboardBranchesMetricView } from "@/app/(app)/dashboard/_components/dashboard-overview-charts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatCurrency, formatNumber } from "@/lib/utils";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
   DashboardBranchDailyPoint,
-  DashboardBranchRankingPoint,
   DashboardBranchesChartPoint,
   DashboardBranchesData,
-  DashboardBranchesKpis,
 } from "@/modules/dashboard/services/dashboard-branches";
 
-function KpiCard({
-  title,
-  value,
-  helper,
-}: {
-  title: string;
-  value: string;
-  helper: string;
-}) {
-  return (
-    <Card>
-      <CardHeader><CardTitle>{title}</CardTitle></CardHeader>
-      <CardContent>
-        <p className="text-2xl font-semibold">{value}</p>
-        <p className="mt-2 text-sm text-muted-foreground">{helper}</p>
-      </CardContent>
-    </Card>
-  );
-}
+type BranchesFilterMode = "month" | "week" | "day";
+type BranchSalesMetric = "total" | "delivery" | "salon";
 
 function SectionTitle({
   eyebrow,
@@ -52,6 +32,14 @@ function SectionTitle({
   );
 }
 
+function getYearMonth(value: string) {
+  return value.slice(0, 7);
+}
+
+function getMonthDay(value: string) {
+  return value.slice(5, 10);
+}
+
 function getDateYear(value: string) {
   return value.slice(0, 4);
 }
@@ -60,111 +48,123 @@ function getDateMonth(value: string) {
   return String(Number(value.slice(5, 7)));
 }
 
-function getDateDay(value: string) {
-  return Number(value.slice(8, 10));
+function getIsoWeekValue(value: string) {
+  const date = new Date(`${value}T00:00:00Z`);
+  const day = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const week = Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+
+  return `${date.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
 }
 
-function getMonthLabel(month: string) {
-  return new Intl.DateTimeFormat("es-PE", { month: "short" }).format(
-    new Date(2024, Number(month) - 1, 1),
-  );
+function getIsoWeekNumber(value: string) {
+  return getIsoWeekValue(value).slice(6);
 }
 
-function getDayComparisonKey(fecha: string) {
-  const month = getDateMonth(fecha);
-  const day = getDateDay(fecha);
-
-  return {
-    key: `${month.padStart(2, "0")}-${String(day).padStart(2, "0")}`,
-    label: `${day} ${getMonthLabel(month)}`,
-  };
+function getLocalDateValue(date: Date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
 }
 
-function buildKpis(rows: DashboardBranchDailyPoint[]): DashboardBranchesKpis {
-  const totalSales = rows.reduce((sum, row) => sum + row.sales, 0);
-  const totalUnits = rows.reduce((sum, row) => sum + row.units, 0);
-  const totalOperations = rows.reduce((sum, row) => sum + row.operations, 0);
-  const totalProducts = rows.reduce((sum, row) => sum + row.products, 0);
-  const activeBranches = new Set(rows.map((row) => String(row.branchId ?? row.branch))).size;
-
-  return {
-    totalSales,
-    totalUnits,
-    totalOperations,
-    averageTicket: totalOperations > 0 ? totalSales / totalOperations : 0,
-    activeBranches,
-    averageProductsPerDay: rows.length > 0 ? totalProducts / rows.length : 0,
-  };
+function getIsoWeeksInYear(year: number) {
+  return Number(getIsoWeekNumber(`${year}-12-28`));
 }
 
-function buildRanking(rows: DashboardBranchDailyPoint[]): DashboardBranchRankingPoint[] {
+function getIsoWeekStartDate(year: number, week: number) {
+  const date = new Date(Date.UTC(year, 0, 4));
+  const day = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() - day + 1 + ((week - 1) * 7));
+  return date;
+}
+
+function formatWeekDate(date: Date) {
+  return new Intl.DateTimeFormat("es-PE", { day: "numeric", month: "short" }).format(date);
+}
+
+function buildWeekOptions(year: number) {
+  return Array.from({ length: getIsoWeeksInYear(year) }, (_, index) => {
+    const week = index + 1;
+    const start = getIsoWeekStartDate(year, week);
+    const end = new Date(start);
+    end.setUTCDate(start.getUTCDate() + 6);
+
+    return {
+      value: String(week).padStart(2, "0"),
+      label: `Semana ${week} · ${formatWeekDate(start)} - ${formatWeekDate(end)}`,
+    };
+  });
+}
+
+function getBranchSalesValue(row: DashboardBranchDailyPoint, metric: BranchSalesMetric) {
+  if (metric === "delivery") return row.deliverySales;
+  if (metric === "salon") return row.salonSales;
+  return row.sales;
+}
+
+function buildBranchYearSales(rows: DashboardBranchDailyPoint[], metric: BranchSalesMetric) {
   return Array.from(
     rows.reduce((map, row) => {
+      const year = getDateYear(row.fecha);
       const key = String(row.branchId ?? row.branch);
+      const entry = map.get(key) ?? { label: row.branch };
+      entry[year] = Number(entry[year] ?? 0) + getBranchSalesValue(row, metric);
+      map.set(key, entry);
+      return map;
+    }, new Map<string, DashboardBranchesChartPoint>()),
+  )
+    .sort((a, b) => {
+      const totalA = Object.entries(a[1]).reduce((sum, [key, value]) => key === "label" ? sum : sum + Number(value), 0);
+      const totalB = Object.entries(b[1]).reduce((sum, [key, value]) => key === "label" ? sum : sum + Number(value), 0);
+      return totalB - totalA;
+    })
+    .map(([, value]) => value);
+}
+
+function buildChannelShareRowsByYearAndBranch(rows: DashboardBranchDailyPoint[]) {
+  return Array.from(
+    rows.reduce((map, row) => {
+      const year = getDateYear(row.fecha);
+      const branchKey = String(row.branchId ?? row.branch);
+      const key = `${year}__${branchKey}`;
       const current = map.get(key) ?? {
-        branchId: row.branchId,
+        year,
         branch: row.branch,
-        sales: 0,
-        units: 0,
-        operations: 0,
-        averageTicket: 0,
-        averageProducts: 0,
-        productDays: 0,
+        salonSales: 0,
+        deliverySales: 0,
       };
 
-      current.sales += row.sales;
-      current.units += row.units;
-      current.operations += row.operations;
-      current.averageProducts += row.products;
-      current.productDays += 1;
-      current.averageTicket = current.operations > 0 ? current.sales / current.operations : 0;
+      current.salonSales += row.salonSales;
+      current.deliverySales += row.deliverySales;
       map.set(key, current);
       return map;
-    }, new Map<string, DashboardBranchRankingPoint & { productDays: number }>()),
+    }, new Map<string, { year: string; branch: string; salonSales: number; deliverySales: number }>()),
   )
-    .map(([, value]) => ({
-      branchId: value.branchId,
-      branch: value.branch,
-      sales: value.sales,
-      units: value.units,
-      operations: value.operations,
-      averageTicket: value.averageTicket,
-      averageProducts: value.productDays > 0 ? value.averageProducts / value.productDays : 0,
-    }))
-    .sort((a, b) => b.sales - a.sales);
-}
-
-function buildDailyTrend(rows: DashboardBranchDailyPoint[]) {
-  return Array.from(
-    rows.reduce((map, row) => {
-      const year = getDateYear(row.fecha);
-      const dayKey = getDayComparisonKey(row.fecha);
-      const entry = map.get(dayKey.key) ?? { label: dayKey.label };
-      entry[year] = Number(entry[year] ?? 0) + row.sales;
-      map.set(dayKey.key, entry);
-      return map;
-    }, new Map<string, DashboardBranchesChartPoint>()),
-  )
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([, value]) => value);
-}
-
-function buildMonthlyTrend(rows: DashboardBranchDailyPoint[]) {
-  return Array.from(
-    rows.reduce((map, row) => {
-      const year = getDateYear(row.fecha);
-      const month = getDateMonth(row.fecha);
-      const entry = map.get(month.padStart(2, "0")) ?? { label: getMonthLabel(month) };
-      entry[year] = Number(entry[year] ?? 0) + row.sales;
-      map.set(month.padStart(2, "0"), entry);
-      return map;
-    }, new Map<string, DashboardBranchesChartPoint>()),
-  )
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([, value]) => value);
+    .map(([, value]) => {
+      const total = value.salonSales + value.deliverySales;
+      return {
+        year: value.year,
+        branch: value.branch,
+        label: `${value.branch} - ${value.year}`,
+        Salón: total > 0 ? (value.salonSales / total) * 100 : 0,
+        Delivery: total > 0 ? (value.deliverySales / total) * 100 : 0,
+      };
+    })
+    .sort((a, b) => {
+      const branchDiff = a.branch.localeCompare(b.branch, "es");
+      if (branchDiff !== 0) return branchDiff;
+      return Number(a.year) - Number(b.year);
+    });
 }
 
 export function DashboardBranchesSection({ branches }: { branches: DashboardBranchesData }) {
+  const currentDateValue = getLocalDateValue(new Date());
+  const currentYear = Number(getDateYear(currentDateValue));
+  const currentWeek = getIsoWeekNumber(currentDateValue);
+  const weekOptions = useMemo(() => buildWeekOptions(currentYear), [currentYear]);
   const dateBounds = useMemo(() => {
     const dates = branches.dailyRows.map((row) => row.fecha).sort((a, b) => a.localeCompare(b));
     return {
@@ -172,97 +172,244 @@ export function DashboardBranchesSection({ branches }: { branches: DashboardBran
       max: dates.at(-1) ?? "",
     };
   }, [branches.dailyRows]);
-  const [dateFrom, setDateFrom] = useState(dateBounds.min);
-  const [dateTo, setDateTo] = useState(dateBounds.max);
+  const availableYears = useMemo(
+    () => Array.from(new Set(branches.dailyRows.map((row) => getDateYear(row.fecha)))).sort((a, b) => Number(a) - Number(b)),
+    [branches.dailyRows],
+  );
+  const monthBounds = useMemo(
+    () => ({
+      min: dateBounds.min ? getYearMonth(dateBounds.min) : "",
+      max: dateBounds.max ? getYearMonth(dateBounds.max) : "",
+    }),
+    [dateBounds.max, dateBounds.min],
+  );
+  const [filterMode, setFilterMode] = useState<BranchesFilterMode>("week");
+  const [selectedMonth, setSelectedMonth] = useState(monthBounds.max ? monthBounds.max.slice(5, 7) : "1");
+  const [selectedWeek, setSelectedWeek] = useState(currentWeek);
+  const [selectedDay, setSelectedDay] = useState(dateBounds.max ? getMonthDay(dateBounds.max) : "01-01");
+  const [selectedYears, setSelectedYears] = useState(availableYears);
 
   const filteredRows = useMemo(() => {
-    const from = dateFrom || dateBounds.min;
-    const to = dateTo || dateBounds.max;
-    const [start, end] = from && to && from > to ? [to, from] : [from, to];
+    if (filterMode === "week") {
+      return branches.dailyRows.filter((row) => {
+        return getIsoWeekNumber(row.fecha) === selectedWeek.padStart(2, "0");
+      });
+    }
+
+    if (filterMode === "day") {
+      return branches.dailyRows.filter((row) => {
+        return getMonthDay(row.fecha) === selectedDay;
+      });
+    }
 
     return branches.dailyRows.filter((row) => {
-      if (start && row.fecha < start) return false;
-      if (end && row.fecha > end) return false;
-      return true;
+      return getDateMonth(row.fecha).padStart(2, "0") === selectedMonth.padStart(2, "0");
     });
-  }, [branches.dailyRows, dateBounds.max, dateBounds.min, dateFrom, dateTo]);
-
-  const comparisonYears = useMemo(
-    () => Array.from(new Set(filteredRows.map((row) => getDateYear(row.fecha)))).sort((a, b) => Number(a) - Number(b)),
-    [filteredRows],
+  }, [
+    branches.dailyRows,
+    filterMode,
+    selectedDay,
+    selectedMonth,
+    selectedWeek,
+  ]);
+  const filteredRowsByYear = useMemo(
+    () => filteredRows.filter((row) => selectedYears.includes(getDateYear(row.fecha))),
+    [filteredRows, selectedYears],
   );
-  const kpis = useMemo(() => buildKpis(filteredRows), [filteredRows]);
-  const ranking = useMemo(() => buildRanking(filteredRows), [filteredRows]);
-  const dailyTrend = useMemo(() => buildDailyTrend(filteredRows), [filteredRows]);
-  const monthlyTrend = useMemo(() => buildMonthlyTrend(filteredRows), [filteredRows]);
+  const comparisonYears = useMemo(
+    () => availableYears.filter((year) => selectedYears.includes(year)),
+    [availableYears, selectedYears],
+  );
+  const branchYearTotalSales = useMemo(() => buildBranchYearSales(filteredRowsByYear, "total"), [filteredRowsByYear]);
+  const branchYearDeliverySales = useMemo(() => buildBranchYearSales(filteredRowsByYear, "delivery"), [filteredRowsByYear]);
+  const branchYearSalonSales = useMemo(() => buildBranchYearSales(filteredRowsByYear, "salon"), [filteredRowsByYear]);
+  const channelShareRows = useMemo(() => buildChannelShareRowsByYearAndBranch(filteredRowsByYear), [filteredRowsByYear]);
+  const dailyTrend: DashboardBranchesChartPoint[] = [];
+  const monthlyTrend: DashboardBranchesChartPoint[] = [];
 
   return (
     <section id="sucursales" className="space-y-4 scroll-mt-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <SectionTitle
-          eyebrow="Sucursales"
+          eyebrow="Ventas totales"
           title="Rendimiento por sede"
           description="Comparativo de ventas, ticket, volumen y variedad entre sucursales."
         />
-        <DashboardExportButtons
-          section="branches"
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          options={[
-            { label: "Ranking Excel", view: "ranking" },
-            { label: "Tendencias Excel", view: "trends" },
-            { label: "Diario Excel", view: "daily" },
-          ]}
-        />
-        <div className="grid gap-3 rounded-2xl border bg-card p-3 sm:grid-cols-[minmax(150px,1fr)_minmax(150px,1fr)_auto] sm:items-end">
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground" htmlFor="branches-date-from">
-              Fecha desde
-            </label>
-            <input
-              id="branches-date-from"
-              type="date"
-              min={dateBounds.min}
-              max={dateBounds.max}
-              value={dateFrom}
-              onChange={(event) => setDateFrom(event.target.value)}
-              className="h-10 rounded-lg border border-border bg-input px-3 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
-            />
+        <div className="grid gap-3 rounded-2xl border bg-card p-3 sm:grid-cols-[auto_minmax(150px,1fr)_minmax(150px,1fr)_auto] sm:items-end">
+          <div className="flex h-10 rounded-lg border border-border bg-muted p-1">
+            {([
+              ["week", "Semana"],
+              ["month", "Mes"],
+              ["day", "Día"],
+            ] as const).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setFilterMode(mode)}
+                className={`rounded-md px-3 text-sm font-medium transition ${
+                  filterMode === mode
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground" htmlFor="branches-date-to">
-              Fecha hasta
-            </label>
-            <input
-              id="branches-date-to"
-              type="date"
-              min={dateBounds.min}
-              max={dateBounds.max}
-              value={dateTo}
-              onChange={(event) => setDateTo(event.target.value)}
-              className="h-10 rounded-lg border border-border bg-input px-3 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
-            />
+
+          {filterMode === "month" ? (
+            <div className="space-y-1.5 sm:col-span-2">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground" htmlFor="branches-month">
+                Mes
+              </label>
+              <select
+                id="branches-month"
+                value={selectedMonth}
+                onChange={(event) => setSelectedMonth(event.target.value)}
+                className="h-10 w-full rounded-lg border border-border bg-input px-3 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, "0")).map((month) => (
+                  <option key={month} value={month}>
+                    {new Intl.DateTimeFormat("es-PE", { month: "long" }).format(new Date(2024, Number(month) - 1, 1))}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          {filterMode === "week" ? (
+            <div className="space-y-1.5 sm:col-span-2">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground" htmlFor="branches-week">
+                Semana
+              </label>
+              <select
+                id="branches-week"
+                value={selectedWeek}
+                onChange={(event) => setSelectedWeek(event.target.value)}
+                className="h-10 w-full rounded-lg border border-border bg-input px-3 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {weekOptions.map((week) => (
+                  <option key={week.value} value={week.value}>
+                    {week.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          {filterMode === "day" ? (
+            <div className="space-y-1.5 sm:col-span-2">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground" htmlFor="branches-day">
+                Día
+              </label>
+              <input
+                id="branches-day"
+                type="date"
+                value={`2024-${selectedDay}`}
+                onChange={(event) => setSelectedDay(getMonthDay(event.target.value))}
+                className="h-10 w-full rounded-lg border border-border bg-input px-3 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </div>
+          ) : null}
+
+          <div className="flex flex-wrap gap-2 sm:col-span-4">
+            {availableYears.map((year) => (
+              <label key={year} className="inline-flex h-8 items-center gap-2 rounded-full border px-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={selectedYears.includes(year)}
+                  onChange={(event) => {
+                    setSelectedYears((current) => {
+                      if (event.target.checked) return [...current, year].sort((a, b) => Number(a) - Number(b));
+                      return current.filter((item) => item !== year);
+                    });
+                  }}
+                />
+                {year}
+              </label>
+            ))}
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setDateFrom(dateBounds.min);
-              setDateTo(dateBounds.max);
-            }}
-            className="h-10 rounded-lg border border-border px-3 text-sm font-medium text-muted-foreground transition hover:text-foreground"
-          >
-            Todo
-          </button>
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <KpiCard title="Ventas sucursales" value={formatCurrency(kpis.totalSales)} helper="Suma de ventas visibles en el subrango." />
-        <KpiCard title="Sucursales activas" value={formatNumber(kpis.activeBranches)} helper="Sedes con datos para este corte." />
-        <KpiCard title="SKUs por día" value={formatNumber(kpis.averageProductsPerDay)} helper="Promedio de variedad diaria visible." />
-      </div>
+      <section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Ventas por sucursal</CardTitle>
+            <p className="text-sm text-muted-foreground">Compara el total vendido por sede para la misma semana, mes o día en cada año.</p>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="total" className="space-y-4">
+              <TabsList className="h-10 rounded-xl">
+                <TabsTrigger value="total" className="rounded-lg px-4">
+                  Ventas totales
+                </TabsTrigger>
+                <TabsTrigger value="delivery" className="rounded-lg px-4">
+                  Delivery
+                </TabsTrigger>
+                <TabsTrigger value="salon" className="rounded-lg px-4">
+                  Salón
+                </TabsTrigger>
+              </TabsList>
 
-      <section className="grid gap-4 xl:grid-cols-2">
+              <TabsContent value="total" className="mt-0">
+                <DashboardBranchesMetricView
+                  data={branchYearTotalSales}
+                  keys={comparisonYears}
+                  chart="bar"
+                  labelHeader="Sucursal"
+                  showValueLabels
+                  largeText
+                  barLayout="horizontal"
+                />
+              </TabsContent>
+              <TabsContent value="delivery" className="mt-0">
+                <DashboardBranchesMetricView
+                  data={branchYearDeliverySales}
+                  keys={comparisonYears}
+                  chart="bar"
+                  labelHeader="Sucursal"
+                  showValueLabels
+                  largeText
+                  barLayout="horizontal"
+                />
+              </TabsContent>
+              <TabsContent value="salon" className="mt-0">
+                <DashboardBranchesMetricView
+                  data={branchYearSalonSales}
+                  keys={comparisonYears}
+                  chart="bar"
+                  labelHeader="Sucursal"
+                  showValueLabels
+                  largeText
+                  barLayout="horizontal"
+                />
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+      </section>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Salón y delivery por año</CardTitle>
+          <p className="text-sm text-muted-foreground">Porcentaje de venta en salón y delivery durante el período seleccionado.</p>
+        </CardHeader>
+        <CardContent>
+          <DashboardBranchesMetricView
+            data={channelShareRows}
+            keys={["Salón", "Delivery"]}
+            chart="bar"
+            valueFormat="percent"
+            labelHeader="Sucursal / año"
+            showValueLabels
+            barLayout="horizontal"
+            stackedBars
+          />
+        </CardContent>
+      </Card>
+
+      <section className="hidden">
         <Card>
           <CardHeader>
             <CardTitle>Tendencia diaria por año</CardTitle>
@@ -283,41 +430,7 @@ export function DashboardBranchesSection({ branches }: { branches: DashboardBran
         </Card>
       </section>
 
-      <Card>
-        <CardHeader><CardTitle>Ranking de sucursales</CardTitle></CardHeader>
-        <CardContent className="grid gap-3 xl:grid-cols-2">
-          {ranking.length ? (
-            ranking.slice(0, 8).map((branch) => (
-              <div key={`${branch.branchId}-${branch.branch}`} className="rounded-2xl border p-4">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <p className="font-medium">{branch.branch}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {formatNumber(branch.units)} unidades · {formatNumber(branch.operations)} operaciones
-                    </p>
-                  </div>
-                  <div className="grid gap-1 text-right sm:grid-cols-3 sm:gap-6">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Ventas</p>
-                      <p className="font-semibold">{formatCurrency(branch.sales)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Ticket</p>
-                      <p className="font-semibold">{formatCurrency(branch.averageTicket)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">SKUs</p>
-                      <p className="font-semibold">{formatNumber(branch.averageProducts)}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))
-          ) : (
-            <p className="text-sm text-muted-foreground">No hay sucursales visibles con este subrango.</p>
-          )}
-        </CardContent>
-      </Card>
+     
     </section>
   );
 }

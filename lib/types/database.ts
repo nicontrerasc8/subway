@@ -3,7 +3,14 @@ export type AppRole =
   | "gerente_comercial"
   | "jefe_area"
   | "ejecutivo_ventas"
-  | "directorio";
+  | "directorio"
+  | "sucursal_1"
+  | "sucursal_2"
+  | "sucursal_3"
+  | "sucursal_4"
+  | "sucursal_5"
+  | "sucursal_6"
+  | "sucursal_7";
 
 export interface ProfileRecord {
   id: string;

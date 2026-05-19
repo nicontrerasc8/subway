@@ -2,7 +2,6 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
 import { dashboardMonthValues, getMonthLabel } from "@/modules/dashboard/lib/date-range-filters";
 
 type DashboardRangeFilterFormProps = {
@@ -14,8 +13,6 @@ type DashboardRangeFilterFormProps = {
     monthTo: string | null;
   };
   availableYears: string[];
-  branch?: string | null;
-  branches?: Array<{ id: string; label: string }>;
   layout?: "stacked" | "inline";
 };
 
@@ -72,35 +69,10 @@ function MonthOptions({ fallbackLabel }: { fallbackLabel: string }) {
   );
 }
 
-function BranchField({
-  action,
-  branch,
-  branches,
-}: {
-  action: string;
-  branch: string | null | undefined;
-  branches: Array<{ id: string; label: string }>;
-}) {
-  if (!branches.length) return null;
-
-  return (
-    <SelectField id={`${action}-branch`} name="branch" label="Sucursal" defaultValue={branch ?? ""}>
-      <option value="">Todas</option>
-      {branches.map((item) => (
-        <option key={item.id} value={item.id}>
-          {item.label}
-        </option>
-      ))}
-    </SelectField>
-  );
-}
-
 export function DashboardRangeFilterForm({
   action,
   filters,
   availableYears,
-  branch,
-  branches = [],
   layout = "stacked",
 }: DashboardRangeFilterFormProps) {
   const fields = (
@@ -127,19 +99,10 @@ export function DashboardRangeFilterForm({
     return (
       <form
         action={action}
-        className={cn(
-          "grid gap-3 md:grid-cols-3 xl:items-end",
-          branches.length
-            ? "xl:grid-cols-[repeat(5,minmax(0,1fr))_auto]"
-            : "xl:grid-cols-[repeat(4,minmax(0,1fr))_auto]",
-        )}
+        className="grid gap-3 md:grid-cols-3 xl:grid-cols-[repeat(4,minmax(0,1fr))_auto] xl:items-end"
       >
         {fields}
-        {branches.length ? (
-          <div>
-            <BranchField action={action} branch={branch} branches={branches} />
-          </div>
-        ) : null}
+
         <div className="flex flex-wrap items-center gap-3 md:col-span-3 xl:col-span-1 xl:min-h-10 xl:flex-nowrap">
           <Button type="submit">Filtrar</Button>
           <Link href={action} className="whitespace-nowrap text-sm font-medium text-muted-foreground transition hover:text-foreground">
@@ -153,7 +116,7 @@ export function DashboardRangeFilterForm({
   return (
     <form action={action} className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2">{fields}</div>
-      <BranchField action={action} branch={branch} branches={branches} />
+
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit">Filtrar</Button>
         <Link href={action} className="text-sm font-medium text-muted-foreground transition hover:text-foreground">
