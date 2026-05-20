@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { DashboardBranchesMetricView } from "@/app/(app)/dashboard/_components/dashboard-overview-charts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatNumber } from "@/lib/utils";
+import { isOperationalDashboardDate } from "@/modules/dashboard/lib/data-periods";
 import { normalizeText } from "@/modules/dashboard/lib/subway-product-category";
 import type {
   DashboardPaymentMethodDailyPoint,
@@ -69,7 +70,7 @@ function getDateYear(value: string) {
 }
 
 function isOperationalYear(value: string) {
-  return Number(getDateYear(value)) >= 2026;
+  return isOperationalDashboardDate(value);
 }
 
 function getDateMonth(value: string) {

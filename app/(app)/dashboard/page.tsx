@@ -1,4 +1,5 @@
 import { forbidden } from "next/navigation";
+import Link from "next/link";
 import { Download } from "lucide-react";
 
 import { DashboardBranchesSection } from "@/app/(app)/dashboard/_components/dashboard-branches-section";
@@ -65,16 +66,16 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           <div className="overflow-x-auto">
             <TabsList className="h-auto min-w-max rounded-2xl p-1.5">
               <TabsTrigger value="sucursales" className="rounded-xl px-4 py-2" asChild>
-                <a href="/dashboard?tab=sucursales">Ventas totales</a>
+                <Link href="/dashboard?tab=sucursales">Ventas totales</Link>
               </TabsTrigger>
               <TabsTrigger value="pagos" className="rounded-xl px-4 py-2" asChild>
-                <a href="/dashboard?tab=pagos">Ticket promedio y Transacciones</a>
+                <Link href="/dashboard?tab=pagos">Ticket promedio y Transacciones</Link>
               </TabsTrigger>
               <TabsTrigger value="delivery" className="rounded-xl px-4 py-2" asChild>
-                <a href="/dashboard?tab=delivery">Delivery por App</a>
+                <Link href="/dashboard?tab=delivery">Delivery por App</Link>
               </TabsTrigger>
               <TabsTrigger value="mix" className="rounded-xl px-4 py-2" asChild>
-                <a href="/dashboard?tab=mix">Mix comercial</a>
+                <Link href="/dashboard?tab=mix">Mix comercial</Link>
               </TabsTrigger>
             </TabsList>
           </div>

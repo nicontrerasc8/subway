@@ -10,6 +10,10 @@ import {
   type DashboardDateRangeFilters,
   type DashboardDateRangeSearchParams,
 } from "@/modules/dashboard/lib/date-range-filters";
+import {
+  HISTORICAL_DASHBOARD_END_DATE,
+  HISTORICAL_DASHBOARD_START_DATE,
+} from "@/modules/dashboard/lib/data-periods";
 
 const PAGE_SIZE = 1000;
 const DETAIL_ROW_LIMIT = 500;
@@ -224,7 +228,10 @@ function getDateBounds(filters: HistoricalMetricsFilters) {
         : null
     );
 
-  return { dateFrom, dateTo };
+  return {
+    dateFrom: dateFrom && dateFrom > HISTORICAL_DASHBOARD_START_DATE ? dateFrom : HISTORICAL_DASHBOARD_START_DATE,
+    dateTo: dateTo && dateTo < HISTORICAL_DASHBOARD_END_DATE ? dateTo : HISTORICAL_DASHBOARD_END_DATE,
+  };
 }
 
 function getMetricValue(row: HistoricalDailyBranchRow, metric: string) {

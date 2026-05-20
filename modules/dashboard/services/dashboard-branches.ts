@@ -12,6 +12,10 @@ import {
   type DashboardDateRangeFilters,
   type DashboardDateRangeSearchParams,
 } from "@/modules/dashboard/lib/date-range-filters";
+import {
+  isHistoricalDashboardDate,
+  isOperationalDashboardDate,
+} from "@/modules/dashboard/lib/data-periods";
 
 const PAGE_SIZE = 1000;
 
@@ -180,13 +184,11 @@ async function fetchPaymentRows() {
 }
 
 function isHistoricalYear(value: string | null) {
-  const year = getDateYear(value);
-  return year !== null && Number(year) >= 2023 && Number(year) <= 2025;
+  return isHistoricalDashboardDate(value);
 }
 
 function isOperationalYear(value: string | null) {
-  const year = getDateYear(value);
-  return year !== null && Number(year) >= 2026;
+  return isOperationalDashboardDate(value);
 }
 
 function mapHistoricalRows(rows: MonthlyBranchRow[]): DailyBranchRow[] {
