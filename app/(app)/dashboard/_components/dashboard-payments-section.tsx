@@ -84,6 +84,14 @@ function getIsoWeekNumber(value: string) {
   return getIsoWeekValue(value).slice(6);
 }
 
+function getIsoWeekYear(value: string) {
+  return getIsoWeekValue(value).slice(0, 4);
+}
+
+function getComparisonYear(value: string, mode: PaymentsFilterMode) {
+  return mode === "week" ? getIsoWeekYear(value) : getDateYear(value);
+}
+
 function getIsoWeeksInYear(year: number) {
   return Number(getIsoWeekNumber(`${year}-12-28`));
 }
@@ -142,10 +150,11 @@ function buildBranchYearMetric(
   rows: DashboardPaymentTicketDailyPoint[],
   metric: PaymentsMetric,
   channels: PaymentChannel[],
+  getYear: (value: string) => string,
 ) {
   return Array.from(
     rows.reduce((map, row) => {
-      const year = getDateYear(row.fecha);
+      const year = getYear(row.fecha);
       const branchKey = String(row.branchId ?? row.branch);
       const amount = getChannelAmount(row, channels);
       const operations = getChannelOperations(row, channels);
@@ -194,10 +203,14 @@ function buildSparkValues(rows: DashboardPaymentTicketDailyPoint[], valueGetter:
   return byDate.map(([, value]) => value);
 }
 
-function buildBranchPaymentScores(rows: DashboardPaymentTicketDailyPoint[], channels: PaymentChannel[]): BranchPaymentScore[] {
+function buildBranchPaymentScores(
+  rows: DashboardPaymentTicketDailyPoint[],
+  channels: PaymentChannel[],
+  getYear: (value: string) => string,
+): BranchPaymentScore[] {
   return Array.from(
     rows.reduce((map, row) => {
-      const year = getDateYear(row.fecha);
+      const year = getYear(row.fecha);
       const branchKey = `${year}__${String(row.branchId ?? row.branch)}`;
       const amount = getChannelAmount(row, channels);
       const operations = getChannelOperations(row, channels);
@@ -295,10 +308,6 @@ export function DashboardPaymentsSection({ payments }: { payments: DashboardPaym
       max: dates.at(-1) ?? "",
     };
   }, [payments.ticketDailyRows]);
-  const availableYears = useMemo(
-    () => Array.from(new Set(payments.ticketDailyRows.map((row) => getDateYear(row.fecha)))).sort((a, b) => Number(a) - Number(b)),
-    [payments.ticketDailyRows],
-  );
   const monthBounds = useMemo(
     () => ({
       min: dateBounds.min ? getYearMonth(dateBounds.min) : "",
@@ -308,6 +317,10 @@ export function DashboardPaymentsSection({ payments }: { payments: DashboardPaym
   );
   const defaultWeekYear = dateBounds.max ? Number(getDateYear(dateBounds.max)) : Number(new Date().getFullYear());
   const [filterMode, setFilterMode] = useState<PaymentsFilterMode>("week");
+  const availableYears = useMemo(
+    () => Array.from(new Set(payments.ticketDailyRows.map((row) => getComparisonYear(row.fecha, filterMode)))).sort((a, b) => Number(a) - Number(b)),
+    [filterMode, payments.ticketDailyRows],
+  );
   const [selectedMonth, setSelectedMonth] = useState(monthBounds.max ? monthBounds.max.slice(5, 7) : "1");
   const [selectedWeek, setSelectedWeek] = useState(dateBounds.max ? getIsoWeekNumber(dateBounds.max) : "01");
   const [selectedDay, setSelectedDay] = useState(dateBounds.max ? getMonthDay(dateBounds.max) : "01-01");
@@ -329,24 +342,28 @@ export function DashboardPaymentsSection({ payments }: { payments: DashboardPaym
     });
   }, [filterMode, payments.ticketDailyRows, selectedDay, selectedMonth, selectedWeek]);
   const filteredRowsByYear = useMemo(
-    () => filteredRows.filter((row) => selectedYears.includes(getDateYear(row.fecha))),
-    [filteredRows, selectedYears],
+    () => filteredRows.filter((row) => selectedYears.includes(getComparisonYear(row.fecha, filterMode))),
+    [filterMode, filteredRows, selectedYears],
+  );
+  const getActiveComparisonYear = useMemo(
+    () => (value: string) => getComparisonYear(value, filterMode),
+    [filterMode],
   );
   const comparisonYears = useMemo(
     () => availableYears.filter((year) => selectedYears.includes(year)),
     [availableYears, selectedYears],
   );
   const branchYearTickets = useMemo(
-    () => buildBranchYearMetric(filteredRowsByYear, "ticket", PAYMENT_CHANNELS),
-    [filteredRowsByYear],
+    () => buildBranchYearMetric(filteredRowsByYear, "ticket", PAYMENT_CHANNELS, getActiveComparisonYear),
+    [filteredRowsByYear, getActiveComparisonYear],
   );
   const branchYearTransactions = useMemo(
-    () => buildBranchYearMetric(filteredRowsByYear, "transactions", PAYMENT_CHANNELS),
-    [filteredRowsByYear],
+    () => buildBranchYearMetric(filteredRowsByYear, "transactions", PAYMENT_CHANNELS, getActiveComparisonYear),
+    [filteredRowsByYear, getActiveComparisonYear],
   );
   const branchScores = useMemo(
-    () => buildBranchPaymentScores(filteredRowsByYear, PAYMENT_CHANNELS),
-    [filteredRowsByYear],
+    () => buildBranchPaymentScores(filteredRowsByYear, PAYMENT_CHANNELS, getActiveComparisonYear),
+    [filteredRowsByYear, getActiveComparisonYear],
   );
   const branchScoresByYear = useMemo(
     () => comparisonYears

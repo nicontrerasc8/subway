@@ -62,6 +62,14 @@ function getIsoWeekNumber(value: string) {
   return getIsoWeekValue(value).slice(6);
 }
 
+function getIsoWeekYear(value: string) {
+  return getIsoWeekValue(value).slice(0, 4);
+}
+
+function getComparisonYear(value: string, mode: BranchesFilterMode) {
+  return mode === "week" ? getIsoWeekYear(value) : getDateYear(value);
+}
+
 function getLocalDateValue(date: Date) {
   return [
     date.getFullYear(),
@@ -116,10 +124,14 @@ function getBranchSalesValue(row: DashboardBranchDailyPoint, metric: BranchSales
   return row.sales;
 }
 
-function buildBranchYearSales(rows: DashboardBranchDailyPoint[], metric: BranchSalesMetric) {
+function buildBranchYearSales(
+  rows: DashboardBranchDailyPoint[],
+  metric: BranchSalesMetric,
+  getYear: (value: string) => string,
+) {
   return Array.from(
     rows.reduce((map, row) => {
-      const year = getDateYear(row.fecha);
+      const year = getYear(row.fecha);
       const key = String(row.branchId ?? row.branch);
       const entry = map.get(key) ?? { label: row.branch };
       entry[year] = Number(entry[year] ?? 0) + getBranchSalesValue(row, metric);
@@ -135,10 +147,13 @@ function buildBranchYearSales(rows: DashboardBranchDailyPoint[], metric: BranchS
     .map(([, value]) => value);
 }
 
-function buildChannelShareRowsByYearAndBranch(rows: DashboardBranchDailyPoint[]) {
+function buildChannelShareRowsByYearAndBranch(
+  rows: DashboardBranchDailyPoint[],
+  getYear: (value: string) => string,
+) {
   return Array.from(
     rows.reduce((map, row) => {
-      const year = getDateYear(row.fecha);
+      const year = getYear(row.fecha);
       const branchKey = String(row.branchId ?? row.branch);
       const key = `${year}__${branchKey}`;
       const current = map.get(key) ?? {
@@ -183,10 +198,6 @@ export function DashboardBranchesSection({ branches }: { branches: DashboardBran
       max: dates.at(-1) ?? "",
     };
   }, [branches.dailyRows]);
-  const availableYears = useMemo(
-    () => Array.from(new Set(branches.dailyRows.map((row) => getDateYear(row.fecha)))).sort((a, b) => Number(a) - Number(b)),
-    [branches.dailyRows],
-  );
   const monthBounds = useMemo(
     () => ({
       min: dateBounds.min ? getYearMonth(dateBounds.min) : "",
@@ -195,6 +206,10 @@ export function DashboardBranchesSection({ branches }: { branches: DashboardBran
     [dateBounds.max, dateBounds.min],
   );
   const [filterMode, setFilterMode] = useState<BranchesFilterMode>("week");
+  const availableYears = useMemo(
+    () => Array.from(new Set(branches.dailyRows.map((row) => getComparisonYear(row.fecha, filterMode)))).sort((a, b) => Number(a) - Number(b)),
+    [branches.dailyRows, filterMode],
+  );
   const [selectedMonth, setSelectedMonth] = useState(monthBounds.max ? monthBounds.max.slice(5, 7) : "1");
   const [selectedWeek, setSelectedWeek] = useState(currentWeek);
   const [selectedDay, setSelectedDay] = useState(dateBounds.max ? getMonthDay(dateBounds.max) : "01-01");
@@ -225,17 +240,21 @@ export function DashboardBranchesSection({ branches }: { branches: DashboardBran
     selectedWeek,
   ]);
   const filteredRowsByYear = useMemo(
-    () => filteredRows.filter((row) => selectedYears.includes(getDateYear(row.fecha))),
-    [filteredRows, selectedYears],
+    () => filteredRows.filter((row) => selectedYears.includes(getComparisonYear(row.fecha, filterMode))),
+    [filteredRows, filterMode, selectedYears],
+  );
+  const getActiveComparisonYear = useMemo(
+    () => (value: string) => getComparisonYear(value, filterMode),
+    [filterMode],
   );
   const comparisonYears = useMemo(
     () => availableYears.filter((year) => selectedYears.includes(year)),
     [availableYears, selectedYears],
   );
-  const branchYearTotalSales = useMemo(() => buildBranchYearSales(filteredRowsByYear, "total"), [filteredRowsByYear]);
-  const branchYearDeliverySales = useMemo(() => buildBranchYearSales(filteredRowsByYear, "delivery"), [filteredRowsByYear]);
-  const branchYearSalonSales = useMemo(() => buildBranchYearSales(filteredRowsByYear, "salon"), [filteredRowsByYear]);
-  const channelShareRows = useMemo(() => buildChannelShareRowsByYearAndBranch(filteredRowsByYear), [filteredRowsByYear]);
+  const branchYearTotalSales = useMemo(() => buildBranchYearSales(filteredRowsByYear, "total", getActiveComparisonYear), [filteredRowsByYear, getActiveComparisonYear]);
+  const branchYearDeliverySales = useMemo(() => buildBranchYearSales(filteredRowsByYear, "delivery", getActiveComparisonYear), [filteredRowsByYear, getActiveComparisonYear]);
+  const branchYearSalonSales = useMemo(() => buildBranchYearSales(filteredRowsByYear, "salon", getActiveComparisonYear), [filteredRowsByYear, getActiveComparisonYear]);
+  const channelShareRows = useMemo(() => buildChannelShareRowsByYearAndBranch(filteredRowsByYear, getActiveComparisonYear), [filteredRowsByYear, getActiveComparisonYear]);
   const dailyTrend: DashboardBranchesChartPoint[] = [];
   const monthlyTrend: DashboardBranchesChartPoint[] = [];
 

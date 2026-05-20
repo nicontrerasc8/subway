@@ -17,6 +17,19 @@ from public.historical_metrics_subway hm
 join public.sucursales_subway s on s.id = hm.sucursal_id;
 
 create or replace view public.v_historical_subway_daily_branch as
+with deduped_metrics as (
+  select *
+  from (
+    select
+      hm.*,
+      row_number() over (
+        partition by hm.sucursal_id, hm.fecha, hm.metrica
+        order by hm.created_at desc, hm.id desc
+      ) as rn
+    from public.historical_metrics_subway hm
+  ) ranked
+  where ranked.rn = 1
+)
 select
   hm.fecha,
   hm.anio,
@@ -36,7 +49,7 @@ select
         / nullif(coalesce(sum(hm.valor) filter (where hm.metrica = 'CLIENTES_TOTAL'), 0), 0)
     else 0
   end as ticket_promedio
-from public.historical_metrics_subway hm
+from deduped_metrics hm
 join public.sucursales_subway s on s.id = hm.sucursal_id
 group by
   hm.fecha,

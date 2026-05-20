@@ -91,6 +91,14 @@ function getIsoWeekNumber(value: string) {
   return getIsoWeekValue(value).slice(6);
 }
 
+function getIsoWeekYear(value: string) {
+  return getIsoWeekValue(value).slice(0, 4);
+}
+
+function getComparisonYear(value: string, mode: DeliveryFilterMode) {
+  return mode === "week" ? getIsoWeekYear(value) : getDateYear(value);
+}
+
 function getIsoWeeksInYear(year: number) {
   return Number(getIsoWeekNumber(`${year}-12-28`));
 }
@@ -159,13 +167,16 @@ function getPlatformKeys(rows: DashboardPaymentMethodDailyPoint[]) {
   });
 }
 
-function buildDeliveryBranchPlatformSales(rows: DashboardPaymentMethodDailyPoint[]) {
+function buildDeliveryBranchPlatformSales(
+  rows: DashboardPaymentMethodDailyPoint[],
+  getYear: (value: string) => string,
+) {
   return Array.from(
     rows.reduce((map, row) => {
       const platform = getDeliveryPlatform(row.method);
       if (!platform) return map;
 
-      const year = getDateYear(row.fecha);
+      const year = getYear(row.fecha);
       const branchKey = `${year}__${String(row.branchId ?? row.branch)}`;
       const current = map.get(branchKey) ?? {
         label: `${row.branch} - ${year}`,
@@ -205,13 +216,16 @@ function buildSparkValues(rows: DashboardPaymentMethodDailyPoint[], valueGetter:
   return byDate.map(([, value]) => value);
 }
 
-function buildDeliveryBranchScores(rows: DashboardPaymentMethodDailyPoint[]): DeliveryBranchScore[] {
+function buildDeliveryBranchScores(
+  rows: DashboardPaymentMethodDailyPoint[],
+  getYear: (value: string) => string,
+): DeliveryBranchScore[] {
   return Array.from(
     rows.reduce((map, row) => {
       const platform = getDeliveryPlatform(row.method);
       if (!platform) return map;
 
-      const year = getDateYear(row.fecha);
+      const year = getYear(row.fecha);
       const branchKey = `${year}__${String(row.branchId ?? row.branch)}`;
       const current = map.get(branchKey) ?? {
         year,
@@ -295,10 +309,6 @@ export function DashboardDeliverySection({ payments }: { payments: DashboardPaym
       max: dates.at(-1) ?? "",
     };
   }, [deliveryRows]);
-  const availableYears = useMemo(
-    () => Array.from(new Set(deliveryRows.map((row) => getDateYear(row.fecha)))).sort((a, b) => Number(a) - Number(b)),
-    [deliveryRows],
-  );
   const monthBounds = useMemo(
     () => ({
       min: dateBounds.min ? getYearMonth(dateBounds.min) : "",
@@ -308,6 +318,10 @@ export function DashboardDeliverySection({ payments }: { payments: DashboardPaym
   );
   const defaultWeekYear = dateBounds.max ? Number(getDateYear(dateBounds.max)) : Number(new Date().getFullYear());
   const [filterMode, setFilterMode] = useState<DeliveryFilterMode>("month");
+  const availableYears = useMemo(
+    () => Array.from(new Set(deliveryRows.map((row) => getComparisonYear(row.fecha, filterMode)))).sort((a, b) => Number(a) - Number(b)),
+    [deliveryRows, filterMode],
+  );
   const [selectedMonth, setSelectedMonth] = useState(monthBounds.max ? monthBounds.max.slice(5, 7) : "1");
   const [selectedWeek, setSelectedWeek] = useState(dateBounds.max ? getIsoWeekNumber(dateBounds.max) : "01");
   const [selectedDay, setSelectedDay] = useState(dateBounds.max ? getMonthDay(dateBounds.max) : "01-01");
@@ -329,16 +343,20 @@ export function DashboardDeliverySection({ payments }: { payments: DashboardPaym
     });
   }, [deliveryRows, filterMode, selectedDay, selectedMonth, selectedWeek]);
   const filteredRowsByYear = useMemo(
-    () => filteredRows.filter((row) => selectedYears.includes(getDateYear(row.fecha))),
-    [filteredRows, selectedYears],
+    () => filteredRows.filter((row) => selectedYears.includes(getComparisonYear(row.fecha, filterMode))),
+    [filteredRows, filterMode, selectedYears],
+  );
+  const getActiveComparisonYear = useMemo(
+    () => (value: string) => getComparisonYear(value, filterMode),
+    [filterMode],
   );
   const comparisonYears = useMemo(
     () => availableYears.filter((year) => selectedYears.includes(year)),
     [availableYears, selectedYears],
   );
   const platformKeys = useMemo(() => getPlatformKeys(filteredRowsByYear), [filteredRowsByYear]);
-  const deliverySalesByPlatform = useMemo(() => buildDeliveryBranchPlatformSales(filteredRowsByYear), [filteredRowsByYear]);
-  const branchScores = useMemo(() => buildDeliveryBranchScores(filteredRowsByYear), [filteredRowsByYear]);
+  const deliverySalesByPlatform = useMemo(() => buildDeliveryBranchPlatformSales(filteredRowsByYear, getActiveComparisonYear), [filteredRowsByYear, getActiveComparisonYear]);
+  const branchScores = useMemo(() => buildDeliveryBranchScores(filteredRowsByYear, getActiveComparisonYear), [filteredRowsByYear, getActiveComparisonYear]);
   const branchScoresByYear = useMemo(
     () => comparisonYears
       .map((year) => ({

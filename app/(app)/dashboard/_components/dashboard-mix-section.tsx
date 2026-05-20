@@ -62,6 +62,14 @@ function getIsoWeekNumber(value: string) {
   return getIsoWeekValue(value).slice(6);
 }
 
+function getIsoWeekYear(value: string) {
+  return getIsoWeekValue(value).slice(0, 4);
+}
+
+function getComparisonYear(value: string, mode: MixFilterMode) {
+  return mode === "week" ? getIsoWeekYear(value) : getDateYear(value);
+}
+
 function getIsoWeeksInYear(year: number) {
   return Number(getIsoWeekNumber(`${year}-12-28`));
 }
@@ -102,7 +110,10 @@ function buildDayOptions(rows: DashboardMixCategoryDailyPoint[]) {
     .map((value) => ({ value, label: formatMonthDay(value) }));
 }
 
-function buildProductComparison(rows: DashboardMixProductDailyPoint[]) {
+function buildProductComparison(
+  rows: DashboardMixProductDailyPoint[],
+  getYear: (value: string) => string,
+) {
   const allProducts = Array.from(
     rows.reduce((map, row) => {
       const current = map.get(row.reference) ?? {
@@ -121,7 +132,7 @@ function buildProductComparison(rows: DashboardMixProductDailyPoint[]) {
     .map(([, value]) => value)
     .sort((a, b) => b.ventas - a.ventas);
 
-  const yearKeys = Array.from(new Set(rows.map((row) => getDateYear(row.fecha))).values()).sort((a, b) => Number(a) - Number(b));
+  const yearKeys = Array.from(new Set(rows.map((row) => getYear(row.fecha))).values()).sort((a, b) => Number(a) - Number(b));
   const branchKeys = Array.from(
     rows.reduce((map, row) => {
       map.set(row.branch, (map.get(row.branch) ?? 0) + row.sales);
@@ -145,7 +156,7 @@ function buildProductComparison(rows: DashboardMixProductDailyPoint[]) {
         byBranch: {},
         byBranchYear: {},
       };
-      const year = getDateYear(row.fecha);
+      const year = getYear(row.fecha);
       current.ventas += row.sales;
       current.unidades += row.units;
       current.byYear[year] = (current.byYear[year] ?? 0) + row.sales;
@@ -163,8 +174,11 @@ function buildProductComparison(rows: DashboardMixProductDailyPoint[]) {
   return { comparison, yearKeys, branchKeys, allProducts };
 }
 
-function buildCategoryComparison(rows: DashboardMixCategoryDailyPoint[]) {
-  const yearKeys = Array.from(new Set(rows.map((row) => getDateYear(row.fecha))).values()).sort((a, b) => Number(a) - Number(b));
+function buildCategoryComparison(
+  rows: DashboardMixCategoryDailyPoint[],
+  getYear: (value: string) => string,
+) {
+  const yearKeys = Array.from(new Set(rows.map((row) => getYear(row.fecha))).values()).sort((a, b) => Number(a) - Number(b));
   const branchKeys = Array.from(
     rows.reduce((map, row) => {
       map.set(row.branch, (map.get(row.branch) ?? 0) + row.sales);
@@ -188,7 +202,7 @@ function buildCategoryComparison(rows: DashboardMixCategoryDailyPoint[]) {
         byBranch: {},
         byBranchYear: {},
       };
-      const year = getDateYear(row.fecha);
+      const year = getYear(row.fecha);
       current.ventas += row.sales;
       current.unidades += row.units;
       current.byYear[year] = (current.byYear[year] ?? 0) + row.sales;
@@ -206,9 +220,12 @@ function buildCategoryComparison(rows: DashboardMixCategoryDailyPoint[]) {
   return { comparison, yearKeys, branchKeys };
 }
 
-function buildCategoryShareByBranchYear(rows: DashboardMixCategoryDailyPoint[]) {
+function buildCategoryShareByBranchYear(
+  rows: DashboardMixCategoryDailyPoint[],
+  getYear: (value: string) => string,
+) {
   const grouped = rows.reduce((map, row) => {
-    const year = getDateYear(row.fecha);
+    const year = getYear(row.fecha);
     const branchKey = `${year}__${String(row.branchId ?? row.branch)}`;
     const current = map.get(branchKey) ?? {
       label: `${row.branch} - ${year}`,
@@ -281,6 +298,10 @@ export function DashboardMixSection({ mix }: { mix: DashboardMixData }) {
 
   const weekOptions = useMemo(() => buildWeekOptions(defaultWeekYear), [defaultWeekYear]);
   const dayOptions = useMemo(() => buildDayOptions(mix.categoryDailyRows), [mix.categoryDailyRows]);
+  const getActiveComparisonYear = useMemo(
+    () => (value: string) => getComparisonYear(value, filterMode),
+    [filterMode],
+  );
   const filteredCategories = useMemo(() => {
     const periodRows = (() => {
       if (filterMode === "week") {
@@ -312,8 +333,8 @@ export function DashboardMixSection({ mix }: { mix: DashboardMixData }) {
     return periodRows;
   }, [filterMode, mix.productDailyRows, selectedDay, selectedMonth, selectedWeek]);
 
-  const categories = useMemo(() => buildCategoryComparison(filteredCategories), [filteredCategories]);
-  const categoryShare = useMemo(() => buildCategoryShareByBranchYear(filteredCategories), [filteredCategories]);
+  const categories = useMemo(() => buildCategoryComparison(filteredCategories, getActiveComparisonYear), [filteredCategories, getActiveComparisonYear]);
+  const categoryShare = useMemo(() => buildCategoryShareByBranchYear(filteredCategories, getActiveComparisonYear), [filteredCategories, getActiveComparisonYear]);
   const categoryShareYears = useMemo(
     () => Array.from(new Set(categoryShare.data.map((item) => String(item.year)))).sort((a, b) => Number(a) - Number(b)),
     [categoryShare.data],
@@ -321,7 +342,7 @@ export function DashboardMixSection({ mix }: { mix: DashboardMixData }) {
   const [selectedCategoryShareYears, setSelectedCategoryShareYears] = useState(categoryShareYears);
   const activeCategoryShareYears = selectedCategoryShareYears.filter((year) => categoryShareYears.includes(year));
   const categoryShareData = categoryShare.data.filter((item) => activeCategoryShareYears.includes(String(item.year)));
-  const products = useMemo(() => buildProductComparison(filteredProducts), [filteredProducts]);
+  const products = useMemo(() => buildProductComparison(filteredProducts, getActiveComparisonYear), [filteredProducts, getActiveComparisonYear]);
 
   return (
     <section id="mix" className="space-y-4 scroll-mt-6">
