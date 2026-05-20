@@ -91,6 +91,17 @@ function buildWeekOptions(year: number) {
   });
 }
 
+function formatMonthDay(value: string) {
+  const [month, day] = value.split("-");
+  return `${day}/${month}`;
+}
+
+function buildDayOptions(rows: DashboardMixCategoryDailyPoint[]) {
+  return Array.from(new Set(rows.map((row) => getMonthDay(row.fecha))))
+    .sort((a, b) => a.localeCompare(b))
+    .map((value) => ({ value, label: formatMonthDay(value) }));
+}
+
 function buildProductComparison(rows: DashboardMixProductDailyPoint[]) {
   const allProducts = Array.from(
     rows.reduce((map, row) => {
@@ -263,12 +274,13 @@ export function DashboardMixSection({ mix }: { mix: DashboardMixData }) {
     [dateBounds.max, dateBounds.min],
   );
   const defaultWeekYear = dateBounds.max ? Number(getDateYear(dateBounds.max)) : Number(new Date().getFullYear());
-  const [filterMode, setFilterMode] = useState<MixFilterMode>("week");
+  const [filterMode, setFilterMode] = useState<MixFilterMode>("month");
   const [selectedMonth, setSelectedMonth] = useState(monthBounds.max ? monthBounds.max.slice(5, 7) : "1");
   const [selectedWeek, setSelectedWeek] = useState(dateBounds.max ? getIsoWeekNumber(dateBounds.max) : "01");
   const [selectedDay, setSelectedDay] = useState(dateBounds.max ? getMonthDay(dateBounds.max) : "01-01");
 
   const weekOptions = useMemo(() => buildWeekOptions(defaultWeekYear), [defaultWeekYear]);
+  const dayOptions = useMemo(() => buildDayOptions(mix.categoryDailyRows), [mix.categoryDailyRows]);
   const filteredCategories = useMemo(() => {
     const periodRows = (() => {
       if (filterMode === "week") {
@@ -386,13 +398,18 @@ export function DashboardMixSection({ mix }: { mix: DashboardMixData }) {
               <label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground" htmlFor="mix-day">
                 Día
               </label>
-              <input
+              <select
                 id="mix-day"
-                type="date"
-                value={`2024-${selectedDay}`}
-                onChange={(event) => setSelectedDay(getMonthDay(event.target.value))}
+                value={selectedDay}
+                onChange={(event) => setSelectedDay(event.target.value)}
                 className="h-10 w-full rounded-lg border border-border bg-input px-3 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
-              />
+              >
+                {dayOptions.map((day) => (
+                  <option key={day.value} value={day.value}>
+                    {day.label}
+                  </option>
+                ))}
+              </select>
             </div>
           ) : null}
 

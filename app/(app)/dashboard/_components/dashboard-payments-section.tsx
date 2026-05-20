@@ -113,6 +113,17 @@ function buildWeekOptions(year: number) {
   });
 }
 
+function formatMonthDay(value: string) {
+  const [month, day] = value.split("-");
+  return `${day}/${month}`;
+}
+
+function buildDayOptions(rows: DashboardPaymentTicketDailyPoint[]) {
+  return Array.from(new Set(rows.map((row) => getMonthDay(row.fecha))))
+    .sort((a, b) => a.localeCompare(b))
+    .map((value) => ({ value, label: formatMonthDay(value) }));
+}
+
 function getChannelAmount(row: DashboardPaymentTicketDailyPoint, channels: PaymentChannel[]) {
   return channels.reduce((sum, channel) => {
     if (channel === "salon") return sum + row.salonAmount;
@@ -303,6 +314,7 @@ export function DashboardPaymentsSection({ payments }: { payments: DashboardPaym
   const [selectedYears, setSelectedYears] = useState(availableYears);
 
   const weekOptions = useMemo(() => buildWeekOptions(defaultWeekYear), [defaultWeekYear]);
+  const dayOptions = useMemo(() => buildDayOptions(payments.ticketDailyRows), [payments.ticketDailyRows]);
   const filteredRows = useMemo(() => {
     if (filterMode === "week") {
       return payments.ticketDailyRows.filter((row) => getIsoWeekNumber(row.fecha) === selectedWeek.padStart(2, "0"));
@@ -423,13 +435,18 @@ export function DashboardPaymentsSection({ payments }: { payments: DashboardPaym
               <label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground" htmlFor="payments-day">
                 Día
               </label>
-              <input
+              <select
                 id="payments-day"
-                type="date"
-                value={`2024-${selectedDay}`}
-                onChange={(event) => setSelectedDay(getMonthDay(event.target.value))}
+                value={selectedDay}
+                onChange={(event) => setSelectedDay(event.target.value)}
                 className="h-10 w-full rounded-lg border border-border bg-input px-3 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
-              />
+              >
+                {dayOptions.map((day) => (
+                  <option key={day.value} value={day.value}>
+                    {day.label}
+                  </option>
+                ))}
+              </select>
             </div>
           ) : null}
 

@@ -120,6 +120,17 @@ function buildWeekOptions(year: number) {
   });
 }
 
+function formatMonthDay(value: string) {
+  const [month, day] = value.split("-");
+  return `${day}/${month}`;
+}
+
+function buildDayOptions(rows: DashboardPaymentMethodDailyPoint[]) {
+  return Array.from(new Set(rows.map((row) => getMonthDay(row.fecha))))
+    .sort((a, b) => a.localeCompare(b))
+    .map((value) => ({ value, label: formatMonthDay(value) }));
+}
+
 function getDeliveryPlatform(value: string) {
   const normalized = normalizeText(value);
   if (normalized.includes("PEYA") || normalized.includes("PEDIDOS")) return "Peya";
@@ -296,13 +307,14 @@ export function DashboardDeliverySection({ payments }: { payments: DashboardPaym
     [dateBounds.max, dateBounds.min],
   );
   const defaultWeekYear = dateBounds.max ? Number(getDateYear(dateBounds.max)) : Number(new Date().getFullYear());
-  const [filterMode, setFilterMode] = useState<DeliveryFilterMode>("week");
+  const [filterMode, setFilterMode] = useState<DeliveryFilterMode>("month");
   const [selectedMonth, setSelectedMonth] = useState(monthBounds.max ? monthBounds.max.slice(5, 7) : "1");
   const [selectedWeek, setSelectedWeek] = useState(dateBounds.max ? getIsoWeekNumber(dateBounds.max) : "01");
   const [selectedDay, setSelectedDay] = useState(dateBounds.max ? getMonthDay(dateBounds.max) : "01-01");
   const [selectedYears, setSelectedYears] = useState(availableYears);
 
   const weekOptions = useMemo(() => buildWeekOptions(defaultWeekYear), [defaultWeekYear]);
+  const dayOptions = useMemo(() => buildDayOptions(deliveryRows), [deliveryRows]);
   const filteredRows = useMemo(() => {
     if (filterMode === "week") {
       return deliveryRows.filter((row) => getIsoWeekNumber(row.fecha) === selectedWeek.padStart(2, "0"));
@@ -414,13 +426,18 @@ export function DashboardDeliverySection({ payments }: { payments: DashboardPaym
               <label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground" htmlFor="delivery-day">
                 Día
               </label>
-              <input
+              <select
                 id="delivery-day"
-                type="date"
-                value={`2024-${selectedDay}`}
-                onChange={(event) => setSelectedDay(getMonthDay(event.target.value))}
+                value={selectedDay}
+                onChange={(event) => setSelectedDay(event.target.value)}
                 className="h-10 w-full rounded-lg border border-border bg-input px-3 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
-              />
+              >
+                {dayOptions.map((day) => (
+                  <option key={day.value} value={day.value}>
+                    {day.label}
+                  </option>
+                ))}
+              </select>
             </div>
           ) : null}
 

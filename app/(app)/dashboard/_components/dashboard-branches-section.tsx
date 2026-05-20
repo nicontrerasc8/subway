@@ -99,6 +99,17 @@ function buildWeekOptions(year: number) {
   });
 }
 
+function formatMonthDay(value: string) {
+  const [month, day] = value.split("-");
+  return `${day}/${month}`;
+}
+
+function buildDayOptions(rows: DashboardBranchDailyPoint[]) {
+  return Array.from(new Set(rows.map((row) => getMonthDay(row.fecha))))
+    .sort((a, b) => a.localeCompare(b))
+    .map((value) => ({ value, label: formatMonthDay(value) }));
+}
+
 function getBranchSalesValue(row: DashboardBranchDailyPoint, metric: BranchSalesMetric) {
   if (metric === "delivery") return row.deliverySales;
   if (metric === "salon") return row.salonSales;
@@ -188,6 +199,7 @@ export function DashboardBranchesSection({ branches }: { branches: DashboardBran
   const [selectedWeek, setSelectedWeek] = useState(currentWeek);
   const [selectedDay, setSelectedDay] = useState(dateBounds.max ? getMonthDay(dateBounds.max) : "01-01");
   const [selectedYears, setSelectedYears] = useState(availableYears);
+  const dayOptions = useMemo(() => buildDayOptions(branches.dailyRows), [branches.dailyRows]);
 
   const filteredRows = useMemo(() => {
     if (filterMode === "week") {
@@ -302,13 +314,18 @@ export function DashboardBranchesSection({ branches }: { branches: DashboardBran
               <label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground" htmlFor="branches-day">
                 Día
               </label>
-              <input
+              <select
                 id="branches-day"
-                type="date"
-                value={`2024-${selectedDay}`}
-                onChange={(event) => setSelectedDay(getMonthDay(event.target.value))}
+                value={selectedDay}
+                onChange={(event) => setSelectedDay(event.target.value)}
                 className="h-10 w-full rounded-lg border border-border bg-input px-3 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
-              />
+              >
+                {dayOptions.map((day) => (
+                  <option key={day.value} value={day.value}>
+                    {day.label}
+                  </option>
+                ))}
+              </select>
             </div>
           ) : null}
 

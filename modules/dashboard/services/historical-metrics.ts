@@ -266,8 +266,10 @@ async function fetchOptionRows() {
   while (true) {
     const { data, error } = await supabase
       .from("v_historical_subway_daily_branch")
-    .select("anio, sucursal_id, sucursal")
-    .order("anio", { ascending: false })
+      .select("anio, sucursal_id, sucursal")
+      .gte("fecha", HISTORICAL_DASHBOARD_START_DATE)
+      .lte("fecha", HISTORICAL_DASHBOARD_END_DATE)
+      .order("anio", { ascending: false })
       .order("sucursal", { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
 
